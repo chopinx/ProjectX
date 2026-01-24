@@ -11,6 +11,7 @@ import SwiftData
 @main
 struct ProjectXApp: App {
     @State private var settings = AppSettings()
+    @State private var importManager = ImportManager()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -35,8 +36,12 @@ struct ProjectXApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(settings: settings)
+                .environment(\.importManager, importManager)
                 .onAppear {
                     setupDefaultData()
+                }
+                .onOpenURL { url in
+                    handleOpenURL(url)
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -46,5 +51,25 @@ struct ProjectXApp: App {
         let context = sharedModelContainer.mainContext
         let manager = DefaultDataManager(modelContext: context)
         manager.setupDefaultData()
+    }
+
+    private func handleOpenURL(_ url: URL) {
+        // Handle file URLs shared to the app
+        if url.isFileURL {
+            importManager.handleSharedContent(url: url)
+        }
+    }
+}
+
+// MARK: - Environment Key for Import Manager
+
+private struct ImportManagerKey: EnvironmentKey {
+    static let defaultValue = ImportManager()
+}
+
+extension EnvironmentValues {
+    var importManager: ImportManager {
+        get { self[ImportManagerKey.self] }
+        set { self[ImportManagerKey.self] = newValue }
     }
 }

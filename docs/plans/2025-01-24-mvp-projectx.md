@@ -2068,3 +2068,28 @@ Flexible tagging system for food labeling:
 - Restore default tags in Settings (Add Missing or Reset All)
 - Proper error handling for all save operations
 - Fixed orphaned item deletion when editing trips
+
+### OCR & Import Features
+
+**OCR Processing:**
+- Uses Vision framework for on-device text extraction
+- All images and PDFs go through OCR before LLM processing
+- Supports both searchable and image-based PDFs
+- Text extraction happens locally (no API calls needed)
+
+**Import Options:**
+- Take Photo (camera)
+- Choose from Library (photo picker)
+- Import PDF or Image (document picker)
+- Enter Text manually
+- Share from other apps (via URL handling)
+
+**Scan Type Selection:**
+- After OCR, user chooses: Receipt or Nutrition Label
+- Receipt: Extracts grocery items with prices and quantities
+- Nutrition Label: Extracts per-100g nutrition values
+
+**Files:**
+- `ProjectX/Services/OCRService.swift` - Vision-based text extraction
+- `ProjectX/Services/ImportManager.swift` - Import handling and document picker
+- Updated `ProjectX/Views/Scan/ScanView.swift` - New import flow with OCR
