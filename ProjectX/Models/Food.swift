@@ -4,7 +4,7 @@ import SwiftData
 @Model
 final class Food {
     @Attribute(.unique) var id: UUID
-    var name: String
+    @Attribute(.unique) var name: String
     var categoryRaw: String
     @Relationship(deleteRule: .cascade) var nutrition: NutritionInfo?
     @Relationship var tags: [Tag] = []

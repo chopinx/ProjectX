@@ -2021,6 +2021,8 @@ git commit -m "feat: complete MVP with LLM integration"
 | Tag foods with custom labels | Yes |
 | Filter by category/tag | Yes |
 | Restore default tags | Yes |
+| Export data (selective) | Yes |
+| Import data (selective) | Yes |
 
 ---
 
@@ -2093,3 +2095,37 @@ Flexible tagging system for food labeling:
 - `ProjectX/Services/OCRService.swift` - Vision-based text extraction
 - `ProjectX/Services/ImportManager.swift` - Import handling and document picker
 - Updated `ProjectX/Views/Scan/ScanView.swift` - New import flow with OCR
+
+### Data Export/Import
+
+Full data export and import functionality with selective data type support:
+
+**Export Features:**
+- Multi-select data types: Food Bank, Tags, Grocery Trips
+- JSON format with ISO8601 dates
+- Export via iOS Share Sheet
+- Filename: `ProjectX-Export-YYYY-MM-DD.json`
+
+**Import Features:**
+- File picker for JSON imports
+- Preview imported data before confirming
+- Multi-select which data types to import
+- Replace existing items with same name (not skip)
+- Maintains food-tag relationships during import
+
+**Unique Constraints:**
+- `@Attribute(.unique)` on `Tag.name` and `Food.name` at model level
+- UI validation prevents duplicate names when creating tags
+- Import replaces existing items with matching names
+
+**Files:**
+- `ProjectX/Services/DataExportService.swift` - Export/import service with Codable structures
+- Updated `ProjectX/Views/Settings/SettingsView.swift` - Export/import UI sheets
+
+### Shared Components
+
+Reusable UI components extracted for code simplification:
+
+**Files:**
+- `ProjectX/Views/Components/TextInputSheet.swift` - Shared text input sheet (receipt/nutrition label)
+- `ProjectX/Views/Components/NutritionFieldRow.swift` - Nutrition input row component

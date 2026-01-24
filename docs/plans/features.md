@@ -1,0 +1,268 @@
+# ProjectX Features Documentation
+
+> Detailed feature documentation. See [main PRD](2025-01-24-mvp-projectx.md) for overview.
+
+---
+
+## Food Category System
+
+Two-level hierarchical category system focused on food types.
+
+### Level 1 - Main Categories
+
+| Category | Icon |
+|----------|------|
+| Vegetables | leaf.fill |
+| Fruits | apple.logo |
+| Meat & Poultry | bird.fill |
+| Seafood | fish.fill |
+| Dairy & Eggs | drop.fill |
+| Grains & Bread | basket.fill |
+| Legumes & Beans | leaf.circle |
+| Nuts & Seeds | seal.fill |
+| Oils & Fats | drop.circle |
+| Snacks & Sweets | birthday.cake.fill |
+| Beverages | cup.and.saucer.fill |
+| Other | questionmark.circle |
+
+### Level 2 - Subcategories
+
+Each main category has relevant subcategories:
+- Meat: Poultry, Red Meat, Processed Meat
+- Dairy: Milk, Cheese, Yogurt, Eggs
+- etc.
+
+**Files:**
+- `ProjectX/Models/FoodCategory.swift` - Category enums and FoodCategory struct
+- `ProjectX/Views/Components/CategoryPicker.swift` - Hierarchical category picker UI
+
+---
+
+## Tag System
+
+Flexible tagging system for food labeling with custom colors.
+
+### Features
+
+- Create custom tags with name and color
+- Attach multiple tags to any food
+- Filter Food Bank by tags
+- Unique tag names enforced at model and UI level
+- 9 preset colors available
+
+### Default Tags
+
+| Tag | Color | Purpose |
+|-----|-------|---------|
+| Organic | Green | Organic foods |
+| Local | Teal | Locally sourced |
+| High Protein | Orange | Protein-rich foods |
+| Low Carb | Blue | Low carbohydrate |
+| Plant-Based | Green | Vegan/vegetarian |
+| Whole Food | Green | Unprocessed foods |
+| Processed | Gray | Processed foods |
+| Red Meat | Red | Red meat items |
+| High Fiber | Purple | Fiber-rich foods |
+| Omega-3 Rich | Teal | Omega-3 sources |
+| Low Sodium | Blue | Low sodium foods |
+| Sugar-Free | Yellow | No added sugar |
+
+### Files
+
+- `ProjectX/Models/Tag.swift` - Tag model with color support and @Attribute(.unique) on name
+- `ProjectX/Views/Components/TagPicker.swift` - Tag selection/creation UI with duplicate validation
+- `ProjectX/Services/DefaultDataManager.swift` - Default data management
+
+---
+
+## OCR & Import Features
+
+### OCR Processing
+
+- Uses Vision framework for on-device text extraction
+- All images and PDFs go through OCR before LLM processing
+- Supports both searchable and image-based PDFs
+- Text extraction happens locally (no API calls needed)
+
+### Import Options
+
+| Option | Description |
+|--------|-------------|
+| Take Photo | Camera capture |
+| Choose from Library | Photo picker |
+| Import PDF or Image | Document picker |
+| Enter Text | Manual text input |
+| Share from other apps | URL handling |
+
+### Scan Type Selection
+
+After OCR, user chooses:
+- **Receipt**: Extracts grocery items with prices and quantities
+- **Nutrition Label**: Extracts per-100g nutrition values
+
+### Files
+
+- `ProjectX/Services/OCRService.swift` - Vision-based text extraction
+- `ProjectX/Services/ImportManager.swift` - Import handling and document picker
+- `ProjectX/Views/Scan/ScanView.swift` - Import flow with OCR
+
+---
+
+## Data Export/Import
+
+Full data export and import functionality with selective data type support.
+
+### Export Features
+
+- Multi-select data types: Food Bank, Tags, Grocery Trips
+- JSON format with ISO8601 dates
+- Export via iOS Share Sheet
+- Filename: `ProjectX-Export-YYYY-MM-DD.json`
+
+### Import Features
+
+- File picker for JSON imports
+- Preview imported data before confirming
+- Multi-select which data types to import
+- Replace existing items with same name (not skip)
+- Maintains food-tag relationships during import
+
+### Export JSON Structure
+
+```json
+{
+  "version": "1.0",
+  "exportDate": "2025-01-24T12:00:00Z",
+  "tags": [
+    {"name": "Organic", "colorHex": "34C759"}
+  ],
+  "foods": [
+    {
+      "name": "Apple",
+      "categoryRaw": "fruits",
+      "nutrition": {...},
+      "tagNames": ["Organic", "Local"]
+    }
+  ],
+  "trips": [
+    {
+      "id": "...",
+      "date": "...",
+      "storeName": "...",
+      "items": [...]
+    }
+  ]
+}
+```
+
+### Unique Constraints
+
+- `@Attribute(.unique)` on `Tag.name` and `Food.name` at model level
+- UI validation prevents duplicate names when creating tags
+- Import replaces existing items with matching names
+
+### Files
+
+- `ProjectX/Services/DataExportService.swift` - Export/import service with Codable structures
+- `ProjectX/Views/Settings/SettingsView.swift` - Export/import UI sheets
+
+---
+
+## Shared Components
+
+Reusable UI components for code simplification.
+
+### TextInputSheet
+
+Shared text input sheet for receipt text and nutrition label text entry.
+
+**File:** `ProjectX/Views/Components/TextInputSheet.swift`
+
+### NutritionFieldRow
+
+Nutrition input row component used in FoodDetailView and NewFoodSheet.
+
+**File:** `ProjectX/Views/Components/NutritionFieldRow.swift`
+
+### TagPicker
+
+Flow layout tag picker with inline creation.
+
+**File:** `ProjectX/Views/Components/TagPicker.swift`
+
+### CategoryPicker
+
+Two-level hierarchical category picker.
+
+**File:** `ProjectX/Views/Components/CategoryPicker.swift`
+
+### FlowLayout
+
+Custom SwiftUI Layout for tag chips.
+
+**File:** `ProjectX/Views/Components/TagPicker.swift` (embedded)
+
+---
+
+## LLM Integration
+
+### Supported Providers
+
+| Provider | Model | Features |
+|----------|-------|----------|
+| OpenAI | gpt-4o | Vision, text |
+| Claude | claude-sonnet-4-20250514 | Vision, text |
+
+### API Key Storage
+
+- Keys stored in iOS Keychain
+- Provider selection in UserDefaults
+- Validation on save with test API call
+
+### LLM Operations
+
+| Operation | Input | Output |
+|-----------|-------|--------|
+| Extract Receipt | Image/Text | [ExtractedReceiptItem] |
+| Extract Nutrition Label | Image/Text | ExtractedNutrition |
+| Estimate Nutrition | Food name, category | ExtractedNutrition |
+| Match Food | Item name, foods list | Food suggestion |
+
+### Files
+
+- `ProjectX/Services/LLMService.swift` - Protocol and types
+- `ProjectX/Services/OpenAIService.swift` - OpenAI implementation
+- `ProjectX/Services/ClaudeService.swift` - Claude implementation
+
+---
+
+## Data Models
+
+### Core Models
+
+| Model | Purpose | Unique Keys |
+|-------|---------|-------------|
+| Food | Food bank entries | id, name |
+| Tag | Food labels | id, name |
+| GroceryTrip | Shopping trips | id |
+| PurchasedItem | Trip items | id |
+| NutritionInfo | Nutrition per 100g | - |
+| AppSettings | App configuration | - |
+
+### Relationships
+
+```
+Food --< Tag (many-to-many)
+GroceryTrip --< PurchasedItem (one-to-many, cascade delete)
+PurchasedItem --> Food (optional)
+Food --> NutritionInfo (one-to-one, cascade delete)
+```
+
+### Files
+
+- `ProjectX/Models/Food.swift`
+- `ProjectX/Models/Tag.swift`
+- `ProjectX/Models/GroceryTrip.swift`
+- `ProjectX/Models/NutritionInfo.swift`
+- `ProjectX/Models/NutritionSummary.swift`
+- `ProjectX/Models/FoodCategory.swift`

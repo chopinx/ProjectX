@@ -9,6 +9,7 @@ struct TagPicker: View {
     @State private var showingCreateTag = false
     @State private var newTagName = ""
     @State private var newTagColorHex = "007AFF"
+    @State private var duplicateError = false
 
     var body: some View {
         Section {
@@ -44,11 +45,17 @@ struct TagPicker: View {
                 CreateTagSheet(
                     name: $newTagName,
                     colorHex: $newTagColorHex,
+                    existingNames: Set(allTags.map { $0.name.lowercased() }),
                     onSave: createTag,
                     onCancel: { showingCreateTag = false }
                 )
             }
             .presentationDetents([.medium])
+        }
+        .alert("Duplicate Tag", isPresented: $duplicateError) {
+            Button("OK") {}
+        } message: {
+            Text("A tag with this name already exists.")
         }
     }
 
@@ -61,9 +68,16 @@ struct TagPicker: View {
     }
 
     private func createTag() {
-        guard !newTagName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let trimmedName = newTagName.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty else { return }
 
-        let tag = Tag(name: newTagName.trimmingCharacters(in: .whitespaces), colorHex: newTagColorHex)
+        // Check for duplicate name
+        if allTags.contains(where: { $0.name.lowercased() == trimmedName.lowercased() }) {
+            duplicateError = true
+            return
+        }
+
+        let tag = Tag(name: trimmedName, colorHex: newTagColorHex)
         context.insert(tag)
         try? context.save()
 
@@ -71,6 +85,13 @@ struct TagPicker: View {
         newTagName = ""
         newTagColorHex = "007AFF"
         showingCreateTag = false
+    }
+}
+
+extension TagPicker {
+    func isDuplicateTagName(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces).lowercased()
+        return allTags.contains { $0.name.lowercased() == trimmed }
     }
 }
 
@@ -102,13 +123,23 @@ private struct TagChip: View {
 private struct CreateTagSheet: View {
     @Binding var name: String
     @Binding var colorHex: String
+    let existingNames: Set<String>
     let onSave: () -> Void
     let onCancel: () -> Void
+
+    private var isDuplicate: Bool {
+        existingNames.contains(name.trimmingCharacters(in: .whitespaces).lowercased())
+    }
 
     var body: some View {
         Form {
             Section("Tag Name") {
                 TextField("e.g., Red Meat, Organic, Local", text: $name)
+                if isDuplicate {
+                    Text("A tag with this name already exists")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
 
             Section("Color") {
@@ -152,7 +183,7 @@ private struct CreateTagSheet: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Add", action: onSave)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isDuplicate)
             }
         }
     }

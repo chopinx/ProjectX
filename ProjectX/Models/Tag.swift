@@ -5,7 +5,7 @@ import SwiftData
 @Model
 final class Tag {
     @Attribute(.unique) var id: UUID
-    var name: String
+    @Attribute(.unique) var name: String
     var colorHex: String
     var createdAt: Date
 
