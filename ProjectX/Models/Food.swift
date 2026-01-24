@@ -7,12 +7,13 @@ final class Food {
     var name: String
     var categoryRaw: String
     @Relationship(deleteRule: .cascade) var nutrition: NutritionInfo?
+    @Relationship var tags: [Tag] = []
     var isUserCreated: Bool
     var createdAt: Date
     var updatedAt: Date
 
     var category: FoodCategory {
-        get { FoodCategory(rawValue: categoryRaw) ?? .other }
+        get { FoodCategory(rawValue: categoryRaw) }
         set { categoryRaw = newValue.rawValue }
     }
 
@@ -21,12 +22,14 @@ final class Food {
         name: String,
         category: FoodCategory = .other,
         nutrition: NutritionInfo? = nil,
+        tags: [Tag] = [],
         isUserCreated: Bool = true
     ) {
         self.id = id
         self.name = name
         self.categoryRaw = category.rawValue
         self.nutrition = nutrition
+        self.tags = tags
         self.isUserCreated = isUserCreated
         self.createdAt = Date()
         self.updatedAt = Date()

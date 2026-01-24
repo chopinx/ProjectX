@@ -43,11 +43,20 @@ struct FoodMatch: Codable, Identifiable {
 // MARK: - Protocol
 
 protocol LLMService {
+    /// Validate the API key by making a simple test request
+    func validateAPIKey() async throws
+
     /// Extract items from a receipt image
     func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem]
 
+    /// Extract items from receipt text (copy-pasted or typed)
+    func extractReceiptItems(from text: String) async throws -> [ExtractedReceiptItem]
+
     /// Extract nutrition info from a nutrition label image
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition
+
+    /// Extract nutrition info from nutrition label text (copy-pasted or typed)
+    func extractNutritionLabel(from text: String) async throws -> ExtractedNutrition
 
     /// Estimate nutrition for a food item by name
     func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition

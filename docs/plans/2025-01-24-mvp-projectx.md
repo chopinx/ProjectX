@@ -2,20 +2,21 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build a manual-first MVP that lets a household maintain a local Food Bank, record grocery trips with items linked to foods, and see nutrition summaries over time. Scan and Settings screens are stubbed for future LLM integration.
+**Goal:** Build an MVP diet management app that scans grocery receipts via LLM, extracts food items, maintains a household Food Bank with nutrition data, and shows nutrition summaries over time.
 
-**Architecture:** Single iOS 17+ SwiftUI app using SwiftData for local persistence. Core domain modeled with `@Model` types (`Food`, `GroceryTrip`, `PurchasedItem`) and plain Swift enums/value types. A `TabView`-based UI surfaces Home (trips), Scan (stub), Food Bank, Analysis, and Settings (stub).
+**Architecture:** Single iOS 17+ SwiftUI app using SwiftData for local persistence. LLM service abstraction supporting OpenAI and Claude APIs. Tab-based navigation: Home, Scan, Food Bank, Analysis, Settings.
 
-**Tech Stack:** Swift 5.9+, SwiftUI, SwiftData, XCTest, Xcode 15+, iOS 17 simulator.
+**Tech Stack:** Swift 5.9+, SwiftUI, SwiftData, PhotosUI, XCTest, Xcode 15+, iOS 17 simulator.
 
 ---
 
 ## Alignment with PRD
 
-- **Grams only:** All quantities stored in grams (PRD requirement). No unit enum.
+- **Grams only:** All quantities stored in grams. LLM converts all units (kg, L, pcs) to grams.
 - **Nutrition per 100g:** All nutrition values are per 100g, scaled by `quantity / 100`.
-- **No LLM in MVP:** Scan flow is a stub. Settings shows API key fields but they're not used yet.
-- **Simplified Analysis:** MVP shows all-time and last-7-days summaries instead of full charts.
+- **LLM Integration:** Receipt scanning, nutrition estimation, food matching.
+- **Secure API Keys:** Stored in iOS Keychain.
+- **Simplified Analysis:** MVP shows all-time and last-7-days summaries (charts deferred).
 
 ---
 
@@ -27,91 +28,14 @@
 - Create: `ProjectX/Models/NutritionSummary.swift`
 - Modify: `ProjectX/Models/NutritionInfo.swift` (already exists)
 - Modify: `ProjectX/Models/FoodCategory.swift` (already exists)
-- Test: `ProjectXTests/Domain/NutritionSummaryTests.swift` (already exists, needs fixes)
+- Test: `ProjectXTests/Domain/NutritionSummaryTests.swift`
 
-### Step 1: Update NutritionSummaryTests
+### Step 1: Verify existing models
 
-Fix tests to match PRD's grams-only model. Replace content of `ProjectXTests/Domain/NutritionSummaryTests.swift`:
+Ensure `ProjectX/Models/FoodCategory.swift` exists with all categories.
+Ensure `ProjectX/Models/NutritionInfo.swift` exists with `scaled(byGrams:)` method.
 
-```swift
-import XCTest
-@testable import ProjectX
-
-final class NutritionSummaryTests: XCTestCase {
-    func testSummaryForSingleTripSingleItem() {
-        // Given a food with nutrition per 100g
-        let nutrition = NutritionInfo(
-            calories: 350, protein: 12, carbohydrates: 70, fat: 2,
-            saturatedFat: 0.5, sugar: 2, fiber: 3, sodium: 5
-        )
-        let pasta = Food(name: "Pasta", category: .pantry, nutrition: nutrition)
-
-        // And a trip with 500g of that food
-        let trip = GroceryTrip(date: Date(), storeName: "Test Store")
-        let item = PurchasedItem(name: "Pasta", quantity: 500, price: 2.99, food: pasta)
-        trip.items.append(item)
-
-        // When we compute a summary
-        let summary = NutritionSummary.forTrips([trip])
-
-        // Then values scale by quantity (500g = 5x 100g)
-        XCTAssertEqual(summary.totalCalories, 350 * 5, accuracy: 0.001)
-        XCTAssertEqual(summary.totalProtein, 12 * 5, accuracy: 0.001)
-        XCTAssertEqual(summary.totalCarbohydrates, 70 * 5, accuracy: 0.001)
-        XCTAssertEqual(summary.totalFat, 2 * 5, accuracy: 0.001)
-    }
-
-    func testSummaryForMultipleTripsAndItems() {
-        let appleNutrition = NutritionInfo(
-            calories: 52, protein: 0.3, carbohydrates: 14, fat: 0.2,
-            saturatedFat: 0.0, sugar: 10, fiber: 2.4, sodium: 1
-        )
-        let apple = Food(name: "Apple", category: .produce, nutrition: appleNutrition)
-
-        let milkNutrition = NutritionInfo(
-            calories: 64, protein: 3.4, carbohydrates: 4.8, fat: 3.7,
-            saturatedFat: 2.4, sugar: 4.8, fiber: 0, sodium: 44
-        )
-        let milk = Food(name: "Milk", category: .dairy, nutrition: milkNutrition)
-
-        // Trip 1: 450g apples + 1000g milk
-        let trip1 = GroceryTrip(date: Date(), storeName: "Store A")
-        trip1.items.append(PurchasedItem(name: "Apples", quantity: 450, price: 3.0, food: apple))
-        trip1.items.append(PurchasedItem(name: "Milk 1L", quantity: 1000, price: 1.2, food: milk))
-
-        // Trip 2: 300g apples
-        let trip2 = GroceryTrip(date: Date(), storeName: "Store B")
-        trip2.items.append(PurchasedItem(name: "Apples", quantity: 300, price: 2.0, food: apple))
-
-        let summary = NutritionSummary.forTrips([trip1, trip2])
-
-        // Verify totals are computed
-        XCTAssertGreaterThan(summary.totalCalories, 0)
-        XCTAssertGreaterThan(summary.totalProtein, 0)
-        XCTAssertGreaterThan(summary.totalCarbohydrates, 0)
-        XCTAssertGreaterThan(summary.totalFat, 0)
-    }
-
-    func testSummaryExcludesItemsWithoutFood() {
-        let trip = GroceryTrip(date: Date(), storeName: "Test")
-        trip.items.append(PurchasedItem(name: "Unknown Item", quantity: 500, price: 5.0, food: nil))
-
-        let summary = NutritionSummary.forTrips([trip])
-
-        XCTAssertEqual(summary.totalCalories, 0)
-    }
-}
-```
-
-### Step 2: Run tests to verify they fail
-
-```bash
-xcodebuild test -project ProjectX.xcodeproj -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 16'
-```
-
-Expected: Tests fail (models don't exist yet).
-
-### Step 3: Create Food model
+### Step 2: Create Food model
 
 Create `ProjectX/Models/Food.swift`:
 
@@ -151,7 +75,7 @@ final class Food {
 }
 ```
 
-### Step 4: Create GroceryTrip and PurchasedItem models
+### Step 3: Create GroceryTrip and PurchasedItem models
 
 Create `ProjectX/Models/GroceryTrip.swift`:
 
@@ -195,14 +119,13 @@ final class PurchasedItem {
     var trip: GroceryTrip?
     var isSkipped: Bool
 
-    /// Calculate nutrition for this item based on quantity in grams
     var calculatedNutrition: NutritionInfo? {
         food?.nutrition?.scaled(byGrams: quantity)
     }
 
     init(
         name: String,
-        quantity: Double,  // grams
+        quantity: Double,
         price: Double,
         food: Food? = nil,
         isSkipped: Bool = false
@@ -216,7 +139,7 @@ final class PurchasedItem {
 }
 ```
 
-### Step 5: Create NutritionSummary
+### Step 4: Create NutritionSummary
 
 Create `ProjectX/Models/NutritionSummary.swift`:
 
@@ -243,7 +166,6 @@ struct NutritionSummary {
 
     static func forTrips(_ trips: [GroceryTrip]) -> NutritionSummary {
         var summary = NutritionSummary.zero
-
         for trip in trips {
             for item in trip.items where !item.isSkipped {
                 guard let nutrition = item.calculatedNutrition else { continue }
@@ -257,19 +179,18 @@ struct NutritionSummary {
                 summary.totalSodium += nutrition.sodium
             }
         }
-
         return summary
     }
 }
 ```
 
-### Step 6: Run tests to verify they pass
+### Step 5: Run tests
 
 ```bash
 xcodebuild test -project ProjectX.xcodeproj -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-### Step 7: Commit
+### Step 6: Commit
 
 ```bash
 git add ProjectX/Models ProjectXTests
@@ -278,14 +199,509 @@ git commit -m "feat: add domain models with grams-only quantity storage"
 
 ---
 
-## Task 2: Configure SwiftData & App Entry
+## Task 2: Keychain Helper & App Settings
+
+**Files:**
+- Create: `ProjectX/Utils/KeychainHelper.swift`
+- Create: `ProjectX/Services/AppSettings.swift`
+
+### Step 1: Create KeychainHelper
+
+Create `ProjectX/Utils/KeychainHelper.swift`:
+
+```swift
+import Foundation
+import Security
+
+enum KeychainHelper {
+    enum KeychainError: Error {
+        case duplicateEntry
+        case unknown(OSStatus)
+        case itemNotFound
+    }
+
+    static func save(key: String, value: String) throws {
+        guard let data = value.data(using: .utf8) else { return }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data
+        ]
+
+        // Delete existing item first
+        SecItemDelete(query as CFDictionary)
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw KeychainError.unknown(status)
+        }
+    }
+
+    static func get(key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let string = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return string
+    }
+
+    static func delete(key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}
+```
+
+### Step 2: Create AppSettings
+
+Create `ProjectX/Services/AppSettings.swift`:
+
+```swift
+import Foundation
+import SwiftUI
+
+enum LLMProvider: String, CaseIterable, Identifiable {
+    case openAI = "OpenAI"
+    case anthropic = "Anthropic"
+
+    var id: String { rawValue }
+}
+
+@Observable
+final class AppSettings {
+    private let providerKey = "llm_provider"
+    private let openAIKeyKey = "openai_api_key"
+    private let anthropicKeyKey = "anthropic_api_key"
+
+    var selectedProvider: LLMProvider {
+        didSet {
+            UserDefaults.standard.set(selectedProvider.rawValue, forKey: providerKey)
+        }
+    }
+
+    var openAIAPIKey: String {
+        didSet {
+            try? KeychainHelper.save(key: openAIKeyKey, value: openAIAPIKey)
+        }
+    }
+
+    var anthropicAPIKey: String {
+        didSet {
+            try? KeychainHelper.save(key: anthropicKeyKey, value: anthropicAPIKey)
+        }
+    }
+
+    var currentAPIKey: String {
+        switch selectedProvider {
+        case .openAI: return openAIAPIKey
+        case .anthropic: return anthropicAPIKey
+        }
+    }
+
+    var isConfigured: Bool {
+        !currentAPIKey.isEmpty
+    }
+
+    init() {
+        let providerRaw = UserDefaults.standard.string(forKey: providerKey) ?? LLMProvider.openAI.rawValue
+        self.selectedProvider = LLMProvider(rawValue: providerRaw) ?? .openAI
+        self.openAIAPIKey = KeychainHelper.get(key: openAIKeyKey) ?? ""
+        self.anthropicAPIKey = KeychainHelper.get(key: anthropicKeyKey) ?? ""
+    }
+}
+```
+
+### Step 3: Commit
+
+```bash
+mkdir -p ProjectX/Utils ProjectX/Services
+git add ProjectX/Utils ProjectX/Services/AppSettings.swift
+git commit -m "feat: add KeychainHelper and AppSettings for secure API key storage"
+```
+
+---
+
+## Task 3: LLM Service Layer
+
+**Files:**
+- Create: `ProjectX/Services/LLMService.swift`
+- Create: `ProjectX/Services/OpenAIService.swift`
+- Create: `ProjectX/Services/AnthropicService.swift`
+- Create: `ProjectX/Services/LLMServiceFactory.swift`
+
+### Step 1: Create LLMService protocol and types
+
+Create `ProjectX/Services/LLMService.swift`:
+
+```swift
+import Foundation
+import UIKit
+
+// MARK: - Response Types
+
+struct ExtractedReceiptItem: Codable, Identifiable {
+    var id: UUID = UUID()
+    var name: String
+    var quantityGrams: Double
+    var price: Double
+    var category: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case quantityGrams = "quantity_grams"
+        case price
+        case category
+    }
+}
+
+struct ExtractedNutrition: Codable {
+    var calories: Double
+    var protein: Double
+    var carbohydrates: Double
+    var fat: Double
+    var saturatedFat: Double
+    var sugar: Double
+    var fiber: Double
+    var sodium: Double
+}
+
+// MARK: - Protocol
+
+protocol LLMService {
+    func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem]
+    func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition
+    func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition
+}
+
+// MARK: - Errors
+
+enum LLMError: LocalizedError {
+    case invalidAPIKey
+    case networkError(Error)
+    case invalidResponse
+    case rateLimited
+    case parseError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidAPIKey: return "Invalid API key. Please check Settings."
+        case .networkError(let error): return "Network error: \(error.localizedDescription)"
+        case .invalidResponse: return "Invalid response from AI service."
+        case .rateLimited: return "Rate limited. Please try again later."
+        case .parseError(let msg): return "Failed to parse response: \(msg)"
+        }
+    }
+}
+
+// MARK: - JSON Parsing Helper
+
+enum LLMJSONParser {
+    static func parse<T: Decodable>(_ string: String, as type: T.Type) throws -> T {
+        var cleaned = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("```json") {
+            cleaned = String(cleaned.dropFirst(7))
+        } else if cleaned.hasPrefix("```") {
+            cleaned = String(cleaned.dropFirst(3))
+        }
+        if cleaned.hasSuffix("```") {
+            cleaned = String(cleaned.dropLast(3))
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let data = cleaned.data(using: .utf8) else {
+            throw LLMError.parseError("Invalid UTF-8")
+        }
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw LLMError.parseError(error.localizedDescription)
+        }
+    }
+}
+```
+
+### Step 2: Create OpenAI Service
+
+Create `ProjectX/Services/OpenAIService.swift`:
+
+```swift
+import Foundation
+import UIKit
+
+final class OpenAIService: LLMService {
+    private let apiKey: String
+    private let baseURL = "https://api.openai.com/v1/chat/completions"
+    private let model = "gpt-4o"
+
+    init(apiKey: String) {
+        self.apiKey = apiKey
+    }
+
+    func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem] {
+        let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+        let prompt = """
+        Analyze this grocery receipt and extract all food items.
+        Translate non-English text to English.
+
+        Return JSON array:
+        [{"name": "English name", "quantity_grams": 1000, "price": 2.99, "category": "produce"}]
+
+        Rules:
+        - Convert ALL quantities to grams: "1 kg"→1000, "500 ml"→500, "2 pcs apples"→360
+        - Categories: produce, dairy, meat, seafood, bakery, beverages, snacks, frozen, pantry, other
+        - Price as number without currency
+        - Only return JSON array
+        """
+        let response = try await sendVisionRequest(prompt: prompt, imageBase64: base64)
+        return try LLMJSONParser.parse(response, as: [ExtractedReceiptItem].self)
+    }
+
+    func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition {
+        let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+        let prompt = """
+        Extract nutrition from this label. Convert to per 100g.
+
+        Return JSON:
+        {"calories": 0, "protein": 0, "carbohydrates": 0, "fat": 0, "saturatedFat": 0, "sugar": 0, "fiber": 0, "sodium": 0}
+
+        Rules: calories in kcal, protein/carbs/fat/sugar/fiber in g, sodium in mg. Only return JSON.
+        """
+        let response = try await sendVisionRequest(prompt: prompt, imageBase64: base64)
+        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
+    func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition {
+        let prompt = """
+        Estimate typical nutrition per 100g for: \(foodName) (category: \(category))
+
+        Return JSON:
+        {"calories": 0, "protein": 0, "carbohydrates": 0, "fat": 0, "saturatedFat": 0, "sugar": 0, "fiber": 0, "sodium": 0}
+
+        Use typical values. calories in kcal, sodium in mg, others in g. Only return JSON.
+        """
+        let response = try await sendTextRequest(prompt: prompt)
+        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
+    // MARK: - Private
+
+    private func sendVisionRequest(prompt: String, imageBase64: String) async throws -> String {
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [[
+                "role": "user",
+                "content": [
+                    ["type": "text", "text": prompt],
+                    ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(imageBase64)"]]
+                ]
+            ]],
+            "max_tokens": 4096
+        ]
+        return try await sendRequest(body: body)
+    }
+
+    private func sendTextRequest(prompt: String) async throws -> String {
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [["role": "user", "content": prompt]],
+            "max_tokens": 1024
+        ]
+        return try await sendRequest(body: body)
+    }
+
+    private func sendRequest(body: [String: Any]) async throws -> String {
+        var request = URLRequest(url: URL(string: baseURL)!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw LLMError.invalidResponse }
+
+        if http.statusCode == 401 { throw LLMError.invalidAPIKey }
+        if http.statusCode == 429 { throw LLMError.rateLimited }
+        guard http.statusCode == 200 else { throw LLMError.invalidResponse }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw LLMError.invalidResponse
+        }
+        return content
+    }
+}
+```
+
+### Step 3: Create Anthropic Service
+
+Create `ProjectX/Services/AnthropicService.swift`:
+
+```swift
+import Foundation
+import UIKit
+
+final class AnthropicService: LLMService {
+    private let apiKey: String
+    private let baseURL = "https://api.anthropic.com/v1/messages"
+    private let model = "claude-sonnet-4-20250514"
+
+    init(apiKey: String) {
+        self.apiKey = apiKey
+    }
+
+    func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem] {
+        let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+        let prompt = """
+        Analyze this grocery receipt and extract all food items.
+        Translate non-English text to English.
+
+        Return JSON array:
+        [{"name": "English name", "quantity_grams": 1000, "price": 2.99, "category": "produce"}]
+
+        Rules:
+        - Convert ALL quantities to grams: "1 kg"→1000, "500 ml"→500, "2 pcs apples"→360
+        - Categories: produce, dairy, meat, seafood, bakery, beverages, snacks, frozen, pantry, other
+        - Price as number without currency
+        - Only return JSON array
+        """
+        let response = try await sendVisionRequest(prompt: prompt, imageBase64: base64)
+        return try LLMJSONParser.parse(response, as: [ExtractedReceiptItem].self)
+    }
+
+    func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition {
+        let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+        let prompt = """
+        Extract nutrition from this label. Convert to per 100g.
+
+        Return JSON:
+        {"calories": 0, "protein": 0, "carbohydrates": 0, "fat": 0, "saturatedFat": 0, "sugar": 0, "fiber": 0, "sodium": 0}
+
+        Rules: calories in kcal, protein/carbs/fat/sugar/fiber in g, sodium in mg. Only return JSON.
+        """
+        let response = try await sendVisionRequest(prompt: prompt, imageBase64: base64)
+        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
+    func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition {
+        let prompt = """
+        Estimate typical nutrition per 100g for: \(foodName) (category: \(category))
+
+        Return JSON:
+        {"calories": 0, "protein": 0, "carbohydrates": 0, "fat": 0, "saturatedFat": 0, "sugar": 0, "fiber": 0, "sodium": 0}
+
+        Use typical values. calories in kcal, sodium in mg, others in g. Only return JSON.
+        """
+        let response = try await sendTextRequest(prompt: prompt)
+        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
+    // MARK: - Private
+
+    private func sendVisionRequest(prompt: String, imageBase64: String) async throws -> String {
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 4096,
+            "messages": [[
+                "role": "user",
+                "content": [
+                    ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": imageBase64]],
+                    ["type": "text", "text": prompt]
+                ]
+            ]]
+        ]
+        return try await sendRequest(body: body)
+    }
+
+    private func sendTextRequest(prompt: String) async throws -> String {
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 1024,
+            "messages": [["role": "user", "content": prompt]]
+        ]
+        return try await sendRequest(body: body)
+    }
+
+    private func sendRequest(body: [String: Any]) async throws -> String {
+        var request = URLRequest(url: URL(string: baseURL)!)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw LLMError.invalidResponse }
+
+        if http.statusCode == 401 { throw LLMError.invalidAPIKey }
+        if http.statusCode == 429 { throw LLMError.rateLimited }
+        guard http.statusCode == 200 else { throw LLMError.invalidResponse }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = json["content"] as? [[String: Any]],
+              let text = content.first?["text"] as? String else {
+            throw LLMError.invalidResponse
+        }
+        return text
+    }
+}
+```
+
+### Step 4: Create LLM Service Factory
+
+Create `ProjectX/Services/LLMServiceFactory.swift`:
+
+```swift
+import Foundation
+
+enum LLMServiceFactory {
+    static func create(settings: AppSettings) -> LLMService? {
+        guard settings.isConfigured else { return nil }
+
+        switch settings.selectedProvider {
+        case .openAI:
+            return OpenAIService(apiKey: settings.openAIAPIKey)
+        case .anthropic:
+            return AnthropicService(apiKey: settings.anthropicAPIKey)
+        }
+    }
+}
+```
+
+### Step 5: Commit
+
+```bash
+git add ProjectX/Services
+git commit -m "feat: add LLM service layer with OpenAI and Anthropic support"
+```
+
+---
+
+## Task 4: Configure SwiftData & App Entry
 
 **Files:**
 - Modify: `ProjectX/ProjectXApp.swift`
+- Modify: `ProjectX/ContentView.swift`
 
-### Step 1: Update ProjectXApp with model container
+### Step 1: Update ProjectXApp
 
-Replace content of `ProjectX/ProjectXApp.swift`:
+Replace `ProjectX/ProjectXApp.swift`:
 
 ```swift
 import SwiftUI
@@ -293,6 +709,8 @@ import SwiftData
 
 @main
 struct ProjectXApp: App {
+    @State private var settings = AppSettings()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Food.self,
@@ -300,13 +718,9 @@ struct ProjectXApp: App {
             GroceryTrip.self,
             PurchasedItem.self
         ])
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false
-        )
-
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(for: schema, configurations: [config])
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
@@ -314,23 +728,54 @@ struct ProjectXApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(settings: settings)
         }
         .modelContainer(sharedModelContainer)
     }
 }
 ```
 
-### Step 2: Commit
+### Step 2: Update ContentView
+
+Replace `ProjectX/ContentView.swift`:
+
+```swift
+import SwiftUI
+
+struct ContentView: View {
+    @Bindable var settings: AppSettings
+
+    var body: some View {
+        TabView {
+            HomeView()
+                .tabItem { Label("Home", systemImage: "house.fill") }
+
+            ScanView(settings: settings)
+                .tabItem { Label("Scan", systemImage: "camera.viewfinder") }
+
+            FoodBankView(settings: settings)
+                .tabItem { Label("Food Bank", systemImage: "fork.knife") }
+
+            AnalysisView()
+                .tabItem { Label("Analysis", systemImage: "chart.bar.fill") }
+
+            SettingsView(settings: settings)
+                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+        }
+    }
+}
+```
+
+### Step 3: Commit
 
 ```bash
-git add ProjectX/ProjectXApp.swift
-git commit -m "feat: configure SwiftData model container"
+git add ProjectX/ProjectXApp.swift ProjectX/ContentView.swift
+git commit -m "feat: configure SwiftData and pass settings to views"
 ```
 
 ---
 
-## Task 3: Food Bank UI
+## Task 5: Food Bank UI with LLM Nutrition Estimation
 
 **Files:**
 - Create: `ProjectX/Views/FoodBank/FoodBankView.swift`
@@ -347,6 +792,7 @@ import SwiftData
 struct FoodBankView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Food.name) private var foods: [Food]
+    var settings: AppSettings
 
     @State private var searchText = ""
     @State private var selectedCategory: FoodCategory?
@@ -370,22 +816,21 @@ struct FoodBankView: View {
                     ContentUnavailableView(
                         "No Foods Yet",
                         systemImage: "fork.knife",
-                        description: Text("Tap + to add your first food item")
+                        description: Text("Tap + to add foods or scan a receipt")
                     )
                 } else {
                     ForEach(filteredFoods) { food in
                         NavigationLink {
-                            FoodDetailView(food: food)
+                            FoodDetailView(food: food, settings: settings)
                         } label: {
                             HStack {
                                 Image(systemName: food.category.icon)
                                     .foregroundStyle(.secondary)
                                     .frame(width: 30)
                                 VStack(alignment: .leading) {
-                                    Text(food.name)
-                                        .font(.headline)
-                                    if let nutrition = food.nutrition {
-                                        Text("\(Int(nutrition.calories)) kcal per 100g")
+                                    Text(food.name).font(.headline)
+                                    if let n = food.nutrition {
+                                        Text("\(Int(n.calories)) kcal per 100g")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -401,13 +846,11 @@ struct FoodBankView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
-                        Button("All Categories") { selectedCategory = nil }
+                        Button("All") { selectedCategory = nil }
                         Divider()
-                        ForEach(FoodCategory.allCases) { category in
-                            Button {
-                                selectedCategory = category
-                            } label: {
-                                Label(category.displayName, systemImage: category.icon)
+                        ForEach(FoodCategory.allCases) { cat in
+                            Button { selectedCategory = cat } label: {
+                                Label(cat.displayName, systemImage: cat.icon)
                             }
                         }
                     } label: {
@@ -424,32 +867,32 @@ struct FoodBankView: View {
             }
             .sheet(isPresented: $showingAddFood) {
                 NavigationStack {
-                    FoodDetailView(food: nil)
+                    FoodDetailView(food: nil, settings: settings)
                 }
             }
         }
     }
 
     private func deleteFoods(at offsets: IndexSet) {
-        for index in offsets {
-            context.delete(filteredFoods[index])
-        }
+        for i in offsets { context.delete(filteredFoods[i]) }
         try? context.save()
     }
 }
 ```
 
-### Step 2: Create FoodDetailView
+### Step 2: Create FoodDetailView with LLM estimation
 
 Create `ProjectX/Views/FoodBank/FoodDetailView.swift`:
 
 ```swift
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 struct FoodDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    var settings: AppSettings
 
     @State private var name: String
     @State private var category: FoodCategory
@@ -462,20 +905,26 @@ struct FoodDetailView: View {
     @State private var fiber: String
     @State private var sodium: String
 
+    @State private var isEstimating = false
+    @State private var isScanning = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var errorMessage: String?
+
     private var existingFood: Food?
 
-    init(food: Food?) {
+    init(food: Food?, settings: AppSettings) {
         self.existingFood = food
+        self.settings = settings
         _name = State(initialValue: food?.name ?? "")
         _category = State(initialValue: food?.category ?? .other)
-        _calories = State(initialValue: Self.format(food?.nutrition?.calories))
-        _protein = State(initialValue: Self.format(food?.nutrition?.protein))
-        _carbohydrates = State(initialValue: Self.format(food?.nutrition?.carbohydrates))
-        _fat = State(initialValue: Self.format(food?.nutrition?.fat))
-        _saturatedFat = State(initialValue: Self.format(food?.nutrition?.saturatedFat))
-        _sugar = State(initialValue: Self.format(food?.nutrition?.sugar))
-        _fiber = State(initialValue: Self.format(food?.nutrition?.fiber))
-        _sodium = State(initialValue: Self.format(food?.nutrition?.sodium))
+        _calories = State(initialValue: Self.fmt(food?.nutrition?.calories))
+        _protein = State(initialValue: Self.fmt(food?.nutrition?.protein))
+        _carbohydrates = State(initialValue: Self.fmt(food?.nutrition?.carbohydrates))
+        _fat = State(initialValue: Self.fmt(food?.nutrition?.fat))
+        _saturatedFat = State(initialValue: Self.fmt(food?.nutrition?.saturatedFat))
+        _sugar = State(initialValue: Self.fmt(food?.nutrition?.sugar))
+        _fiber = State(initialValue: Self.fmt(food?.nutrition?.fiber))
+        _sodium = State(initialValue: Self.fmt(food?.nutrition?.sodium))
     }
 
     var body: some View {
@@ -483,9 +932,33 @@ struct FoodDetailView: View {
             Section("Basic Info") {
                 TextField("Name", text: $name)
                 Picker("Category", selection: $category) {
-                    ForEach(FoodCategory.allCases) { cat in
-                        Label(cat.displayName, systemImage: cat.icon).tag(cat)
+                    ForEach(FoodCategory.allCases) { c in
+                        Label(c.displayName, systemImage: c.icon).tag(c)
                     }
+                }
+            }
+
+            if settings.isConfigured {
+                Section {
+                    Button {
+                        Task { await estimateNutrition() }
+                    } label: {
+                        HStack {
+                            Label("Get AI Estimate", systemImage: "sparkles")
+                            if isEstimating { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(isEstimating || name.isEmpty)
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        HStack {
+                            Label("Scan Nutrition Label", systemImage: "camera.viewfinder")
+                            if isScanning { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(isScanning)
+                } footer: {
+                    Text("Use AI to estimate or scan a product label")
                 }
             }
 
@@ -511,6 +984,59 @@ struct FoodDetailView: View {
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .onChange(of: selectedPhoto) { _, newValue in
+            if newValue != nil { Task { await scanLabel() } }
+        }
+    }
+
+    private func estimateNutrition() async {
+        guard let llm = LLMServiceFactory.create(settings: settings) else { return }
+        isEstimating = true
+        defer { isEstimating = false }
+
+        do {
+            let n = try await llm.estimateNutrition(for: name, category: category.rawValue)
+            applyNutrition(n)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func scanLabel() async {
+        guard let llm = LLMServiceFactory.create(settings: settings),
+              let photo = selectedPhoto,
+              let data = try? await photo.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            errorMessage = "Failed to load image"
+            selectedPhoto = nil
+            return
+        }
+
+        isScanning = true
+        defer { isScanning = false; selectedPhoto = nil }
+
+        do {
+            let n = try await llm.extractNutritionLabel(from: image)
+            applyNutrition(n)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func applyNutrition(_ n: ExtractedNutrition) {
+        calories = String(format: "%.1f", n.calories)
+        protein = String(format: "%.1f", n.protein)
+        carbohydrates = String(format: "%.1f", n.carbohydrates)
+        fat = String(format: "%.1f", n.fat)
+        saturatedFat = String(format: "%.1f", n.saturatedFat)
+        sugar = String(format: "%.1f", n.sugar)
+        fiber = String(format: "%.1f", n.fiber)
+        sodium = String(format: "%.1f", n.sodium)
     }
 
     private func save() {
@@ -531,17 +1057,15 @@ struct FoodDetailView: View {
             food.nutrition = nutrition
             food.updatedAt = .now
         } else {
-            let food = Food(name: name, category: category, nutrition: nutrition)
-            context.insert(food)
+            context.insert(Food(name: name, category: category, nutrition: nutrition))
         }
-
         try? context.save()
         dismiss()
     }
 
-    private static func format(_ value: Double?) -> String {
-        guard let value, value != 0 else { return "" }
-        return String(format: "%.1f", value)
+    private static func fmt(_ v: Double?) -> String {
+        guard let v, v != 0 else { return "" }
+        return String(format: "%.1f", v)
     }
 }
 
@@ -558,9 +1082,7 @@ private struct NutritionField: View {
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 80)
-            Text(unit)
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
+            Text(unit).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
         }
     }
 }
@@ -570,17 +1092,506 @@ private struct NutritionField: View {
 
 ```bash
 git add ProjectX/Views/FoodBank
-git commit -m "feat: add Food Bank UI with add/edit/delete"
+git commit -m "feat: add Food Bank with LLM nutrition estimation and label scanning"
 ```
 
 ---
 
-## Task 4: Grocery Trip Management (Home Tab)
+## Task 6: Receipt Scanning Flow
+
+**Files:**
+- Create: `ProjectX/Views/Scan/ScanView.swift`
+- Create: `ProjectX/Views/Scan/ReceiptReviewView.swift`
+- Create: `ProjectX/Views/Scan/NewFoodSheet.swift`
+
+### Step 1: Create ScanView
+
+Create `ProjectX/Views/Scan/ScanView.swift`:
+
+```swift
+import SwiftUI
+import PhotosUI
+
+struct ScanView: View {
+    var settings: AppSettings
+
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var capturedImage: UIImage?
+    @State private var showingCamera = false
+    @State private var isProcessing = false
+    @State private var extractedItems: [ExtractedReceiptItem] = []
+    @State private var showingReview = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                if !settings.isConfigured {
+                    ContentUnavailableView(
+                        "API Key Required",
+                        systemImage: "key.fill",
+                        description: Text("Add your OpenAI or Anthropic API key in Settings")
+                    )
+                } else if isProcessing {
+                    ProgressView("Analyzing receipt...")
+                } else {
+                    Spacer()
+                    Image(systemName: "doc.text.viewfinder")
+                        .font(.system(size: 80))
+                        .foregroundStyle(.secondary)
+                    Text("Scan a grocery receipt")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+
+                    VStack(spacing: 16) {
+                        Button {
+                            showingCamera = true
+                        } label: {
+                            Label("Take Photo", systemImage: "camera.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+
+                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                            Label("Choose from Library", systemImage: "photo.on.rectangle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 32)
+                }
+            }
+            .navigationTitle("Scan")
+            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+            .sheet(isPresented: $showingCamera) {
+                CameraView(image: $capturedImage)
+            }
+            .sheet(isPresented: $showingReview) {
+                ReceiptReviewView(items: $extractedItems, settings: settings) {
+                    showingReview = false
+                    extractedItems = []
+                }
+            }
+            .onChange(of: selectedPhoto) { _, val in
+                Task {
+                    if let data = try? await val?.loadTransferable(type: Data.self),
+                       let img = UIImage(data: data) {
+                        await processImage(img)
+                    }
+                }
+            }
+            .onChange(of: capturedImage) { _, img in
+                if let img { Task { await processImage(img) } }
+            }
+        }
+    }
+
+    private func processImage(_ image: UIImage) async {
+        guard let llm = LLMServiceFactory.create(settings: settings) else {
+            errorMessage = "LLM not configured"
+            return
+        }
+
+        isProcessing = true
+        defer { isProcessing = false; selectedPhoto = nil; capturedImage = nil }
+
+        do {
+            extractedItems = try await llm.extractReceiptItems(from: image)
+            showingReview = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+struct CameraView: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraView
+        init(_ parent: CameraView) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            parent.image = info[.originalImage] as? UIImage
+            parent.dismiss()
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+```
+
+### Step 2: Create ReceiptReviewView
+
+Create `ProjectX/Views/Scan/ReceiptReviewView.swift`:
+
+```swift
+import SwiftUI
+import SwiftData
+
+struct ReceiptReviewView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Food.name) private var existingFoods: [Food]
+
+    @Binding var items: [ExtractedReceiptItem]
+    var settings: AppSettings
+    var onComplete: () -> Void
+
+    @State private var matchedFoods: [UUID: Food] = [:]
+    @State private var skippedItems: Set<UUID> = []
+    @State private var newFoodItem: ExtractedReceiptItem?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach($items) { $item in
+                        ItemRow(
+                            item: item,
+                            matchedFood: matchedFoods[item.id],
+                            isSkipped: skippedItems.contains(item.id),
+                            onToggleSkip: { toggleSkip(item) },
+                            onAddFood: { newFoodItem = item },
+                            onSelectFood: { food in matchedFoods[item.id] = food },
+                            existingFoods: existingFoods
+                        )
+                    }
+                    .onDelete { offsets in items.remove(atOffsets: offsets) }
+                } header: {
+                    Text("\(items.count) items extracted")
+                }
+            }
+            .navigationTitle("Review Items")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss(); onComplete() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save Trip") { saveTrip() }
+                        .disabled(items.isEmpty)
+                }
+            }
+            .sheet(item: $newFoodItem) { item in
+                NewFoodSheet(item: item, settings: settings) { food in
+                    matchedFoods[item.id] = food
+                    newFoodItem = nil
+                }
+            }
+            .onAppear { autoMatchFoods() }
+        }
+    }
+
+    private func autoMatchFoods() {
+        for item in items {
+            if let match = existingFoods.first(where: {
+                $0.name.localizedCaseInsensitiveContains(item.name) ||
+                item.name.localizedCaseInsensitiveContains($0.name)
+            }) {
+                matchedFoods[item.id] = match
+            }
+        }
+    }
+
+    private func toggleSkip(_ item: ExtractedReceiptItem) {
+        if skippedItems.contains(item.id) {
+            skippedItems.remove(item.id)
+        } else {
+            skippedItems.insert(item.id)
+        }
+    }
+
+    private func saveTrip() {
+        let trip = GroceryTrip(date: .now)
+        for item in items {
+            let purchased = PurchasedItem(
+                name: item.name,
+                quantity: item.quantityGrams,
+                price: item.price,
+                food: matchedFoods[item.id],
+                isSkipped: skippedItems.contains(item.id)
+            )
+            purchased.trip = trip
+            trip.items.append(purchased)
+        }
+        context.insert(trip)
+        try? context.save()
+        dismiss()
+        onComplete()
+    }
+}
+
+private struct ItemRow: View {
+    let item: ExtractedReceiptItem
+    let matchedFood: Food?
+    let isSkipped: Bool
+    let onToggleSkip: () -> Void
+    let onAddFood: () -> Void
+    let onSelectFood: (Food) -> Void
+    let existingFoods: [Food]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.headline)
+                        .strikethrough(isSkipped)
+                        .foregroundStyle(isSkipped ? .secondary : .primary)
+                    Text("\(Int(item.quantityGrams))g • \(String(format: "%.2f", item.price))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(isSkipped ? "Include" : "Skip") { onToggleSkip() }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+            }
+
+            if !isSkipped {
+                if let food = matchedFood {
+                    Label(food.name, systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    HStack {
+                        Menu {
+                            ForEach(existingFoods) { food in
+                                Button(food.name) { onSelectFood(food) }
+                            }
+                        } label: {
+                            Label("Link Food", systemImage: "link")
+                                .font(.caption)
+                        }
+
+                        Button { onAddFood() } label: {
+                            Label("Add New", systemImage: "plus.circle")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .opacity(isSkipped ? 0.6 : 1)
+    }
+}
+```
+
+### Step 3: Create NewFoodSheet
+
+Create `ProjectX/Views/Scan/NewFoodSheet.swift`:
+
+```swift
+import SwiftUI
+import SwiftData
+import PhotosUI
+
+struct NewFoodSheet: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    let item: ExtractedReceiptItem
+    var settings: AppSettings
+    var onSave: (Food) -> Void
+
+    @State private var name: String
+    @State private var category: FoodCategory
+    @State private var calories = ""
+    @State private var protein = ""
+    @State private var carbohydrates = ""
+    @State private var fat = ""
+    @State private var saturatedFat = ""
+    @State private var sugar = ""
+    @State private var fiber = ""
+    @State private var sodium = ""
+
+    @State private var isEstimating = false
+    @State private var isScanning = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var errorMessage: String?
+
+    init(item: ExtractedReceiptItem, settings: AppSettings, onSave: @escaping (Food) -> Void) {
+        self.item = item
+        self.settings = settings
+        self.onSave = onSave
+        _name = State(initialValue: item.name)
+        _category = State(initialValue: FoodCategory(rawValue: item.category) ?? .other)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Food") {
+                    TextField("Name", text: $name)
+                    Picker("Category", selection: $category) {
+                        ForEach(FoodCategory.allCases) { c in
+                            Label(c.displayName, systemImage: c.icon).tag(c)
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        Task { await estimate() }
+                    } label: {
+                        HStack {
+                            Label("Get AI Estimate", systemImage: "sparkles")
+                            if isEstimating { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(isEstimating || name.isEmpty)
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        HStack {
+                            Label("Scan Label", systemImage: "camera.viewfinder")
+                            if isScanning { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(isScanning)
+                }
+
+                Section("Nutrition per 100g") {
+                    NutritionRow(label: "Calories", value: $calories, unit: "kcal")
+                    NutritionRow(label: "Protein", value: $protein, unit: "g")
+                    NutritionRow(label: "Carbs", value: $carbohydrates, unit: "g")
+                    NutritionRow(label: "Fat", value: $fat, unit: "g")
+                    NutritionRow(label: "Sat. Fat", value: $saturatedFat, unit: "g")
+                    NutritionRow(label: "Sugar", value: $sugar, unit: "g")
+                    NutritionRow(label: "Fiber", value: $fiber, unit: "g")
+                    NutritionRow(label: "Sodium", value: $sodium, unit: "mg")
+                }
+            }
+            .navigationTitle("New Food")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(name.isEmpty)
+                }
+            }
+            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+            .onChange(of: selectedPhoto) { _, val in
+                if val != nil { Task { await scan() } }
+            }
+        }
+    }
+
+    private func estimate() async {
+        guard let llm = LLMServiceFactory.create(settings: settings) else { return }
+        isEstimating = true
+        defer { isEstimating = false }
+        do {
+            let n = try await llm.estimateNutrition(for: name, category: category.rawValue)
+            apply(n)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func scan() async {
+        guard let llm = LLMServiceFactory.create(settings: settings),
+              let photo = selectedPhoto,
+              let data = try? await photo.loadTransferable(type: Data.self),
+              let img = UIImage(data: data) else {
+            selectedPhoto = nil
+            return
+        }
+        isScanning = true
+        defer { isScanning = false; selectedPhoto = nil }
+        do {
+            let n = try await llm.extractNutritionLabel(from: img)
+            apply(n)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func apply(_ n: ExtractedNutrition) {
+        calories = String(format: "%.0f", n.calories)
+        protein = String(format: "%.1f", n.protein)
+        carbohydrates = String(format: "%.1f", n.carbohydrates)
+        fat = String(format: "%.1f", n.fat)
+        saturatedFat = String(format: "%.1f", n.saturatedFat)
+        sugar = String(format: "%.1f", n.sugar)
+        fiber = String(format: "%.1f", n.fiber)
+        sodium = String(format: "%.0f", n.sodium)
+    }
+
+    private func save() {
+        let nutrition = NutritionInfo(
+            calories: Double(calories) ?? 0,
+            protein: Double(protein) ?? 0,
+            carbohydrates: Double(carbohydrates) ?? 0,
+            fat: Double(fat) ?? 0,
+            saturatedFat: Double(saturatedFat) ?? 0,
+            sugar: Double(sugar) ?? 0,
+            fiber: Double(fiber) ?? 0,
+            sodium: Double(sodium) ?? 0
+        )
+        let food = Food(name: name, category: category, nutrition: nutrition)
+        context.insert(food)
+        try? context.save()
+        onSave(food)
+        dismiss()
+    }
+}
+
+private struct NutritionRow: View {
+    let label: String
+    @Binding var value: String
+    let unit: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("0", text: $value)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 70)
+            Text(unit).foregroundStyle(.secondary).frame(width: 35)
+        }
+    }
+}
+```
+
+### Step 4: Commit
+
+```bash
+git add ProjectX/Views/Scan
+git commit -m "feat: add receipt scanning with LLM extraction and review flow"
+```
+
+---
+
+## Task 7: Home Tab & Analysis Tab
 
 **Files:**
 - Create: `ProjectX/Views/Home/HomeView.swift`
 - Create: `ProjectX/Views/Home/TripDetailView.swift`
-- Create: `ProjectX/Views/Home/ItemEditView.swift`
+- Create: `ProjectX/Views/Analysis/AnalysisView.swift`
 
 ### Step 1: Create HomeView
 
@@ -594,8 +1605,6 @@ struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \GroceryTrip.date, order: .reverse) private var trips: [GroceryTrip]
 
-    @State private var showingNewTrip = false
-
     var body: some View {
         NavigationStack {
             List {
@@ -603,7 +1612,7 @@ struct HomeView: View {
                     ContentUnavailableView(
                         "No Trips Yet",
                         systemImage: "cart.badge.plus",
-                        description: Text("Tap + to add your first grocery trip")
+                        description: Text("Scan a receipt to get started")
                     )
                 } else {
                     ForEach(trips) { trip in
@@ -611,10 +1620,10 @@ struct HomeView: View {
                             TripDetailView(trip: trip)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(tripTitle(for: trip))
+                                Text(tripTitle(trip))
                                     .font(.headline)
                                 HStack {
-                                    Text("\(trip.items.count) item\(trip.items.count == 1 ? "" : "s")")
+                                    Text("\(trip.items.count) items")
                                     Spacer()
                                     Text(String(format: "%.2f", trip.totalSpent))
                                         .fontWeight(.medium)
@@ -624,40 +1633,24 @@ struct HomeView: View {
                             }
                         }
                     }
-                    .onDelete(perform: deleteTrips)
-                }
-            }
-            .navigationTitle("Home")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingNewTrip = true } label: {
-                        Image(systemName: "plus")
+                    .onDelete { offsets in
+                        for i in offsets { context.delete(trips[i]) }
+                        try? context.save()
                     }
                 }
             }
-            .sheet(isPresented: $showingNewTrip) {
-                NavigationStack {
-                    TripDetailView(trip: nil)
-                }
-            }
+            .navigationTitle("Home")
         }
     }
 
-    private func tripTitle(for trip: GroceryTrip) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        let dateStr = formatter.string(from: trip.date)
+    private func tripTitle(_ trip: GroceryTrip) -> String {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        let date = fmt.string(from: trip.date)
         if let store = trip.storeName, !store.isEmpty {
-            return "\(store) - \(dateStr)"
+            return "\(store) - \(date)"
         }
-        return dateStr
-    }
-
-    private func deleteTrips(at offsets: IndexSet) {
-        for index in offsets {
-            context.delete(trips[index])
-        }
-        try? context.save()
+        return date
     }
 }
 ```
@@ -671,253 +1664,57 @@ import SwiftUI
 import SwiftData
 
 struct TripDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Food.name) private var foods: [Food]
-
-    @State private var date: Date
-    @State private var storeName: String
-    @State private var items: [PurchasedItem]
-    @State private var editingItem: PurchasedItem?
-    @State private var showingAddItem = false
-
-    private var existingTrip: GroceryTrip?
-    private var isNewTrip: Bool { existingTrip == nil }
-
-    init(trip: GroceryTrip?) {
-        self.existingTrip = trip
-        _date = State(initialValue: trip?.date ?? .now)
-        _storeName = State(initialValue: trip?.storeName ?? "")
-        _items = State(initialValue: trip?.items ?? [])
-    }
+    let trip: GroceryTrip
 
     var body: some View {
-        Form {
+        List {
             Section("Trip Info") {
-                DatePicker("Date", selection: $date, displayedComponents: .date)
-                TextField("Store (optional)", text: $storeName)
+                LabeledContent("Date", value: trip.date, format: .dateTime.day().month().year())
+                if let store = trip.storeName {
+                    LabeledContent("Store", value: store)
+                }
+                LabeledContent("Total", value: String(format: "%.2f", trip.totalSpent))
             }
 
-            Section {
-                if items.isEmpty {
-                    Text("No items yet")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(items) { item in
-                        Button {
-                            editingItem = item
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.name)
-                                        .font(.headline)
-                                        .foregroundStyle(item.isSkipped ? .secondary : .primary)
-                                        .strikethrough(item.isSkipped)
-                                    if let food = item.food {
-                                        Text(food.name)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text("\(Int(item.quantity))g")
-                                    Text(String(format: "%.2f", item.price))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .font(.subheadline)
+            Section("Items (\(trip.items.count))") {
+                ForEach(trip.items) { item in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name)
+                                .font(.headline)
+                                .strikethrough(item.isSkipped)
+                                .foregroundStyle(item.isSkipped ? .secondary : .primary)
+                            if let food = item.food {
+                                Text(food.name)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        .buttonStyle(.plain)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(Int(item.quantity))g")
+                            Text(String(format: "%.2f", item.price))
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.subheadline)
                     }
-                    .onDelete(perform: deleteItems)
-                }
-
-                Button {
-                    showingAddItem = true
-                } label: {
-                    Label("Add Item", systemImage: "plus.circle")
-                }
-            } header: {
-                Text("Items")
-            }
-        }
-        .navigationTitle(isNewTrip ? "New Trip" : "Edit Trip")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save", action: save)
-            }
-        }
-        .sheet(item: $editingItem) { item in
-            NavigationStack {
-                ItemEditView(item: item, foods: foods) { updatedItem in
-                    if let index = items.firstIndex(where: { $0.id == item.id }) {
-                        items[index] = updatedItem
-                    }
-                    editingItem = nil
                 }
             }
-        }
-        .sheet(isPresented: $showingAddItem) {
-            NavigationStack {
-                ItemEditView(item: nil, foods: foods) { newItem in
-                    items.append(newItem)
-                    showingAddItem = false
-                }
+
+            let summary = NutritionSummary.forTrips([trip])
+            Section("Nutrition Total") {
+                LabeledContent("Calories", value: "\(Int(summary.totalCalories)) kcal")
+                LabeledContent("Protein", value: "\(Int(summary.totalProtein)) g")
+                LabeledContent("Carbs", value: "\(Int(summary.totalCarbohydrates)) g")
+                LabeledContent("Fat", value: "\(Int(summary.totalFat)) g")
             }
         }
-    }
-
-    private func deleteItems(at offsets: IndexSet) {
-        items.remove(atOffsets: offsets)
-    }
-
-    private func save() {
-        let trip: GroceryTrip
-        if let existingTrip {
-            trip = existingTrip
-            trip.date = date
-            trip.storeName = storeName.isEmpty ? nil : storeName
-            trip.updatedAt = .now
-            // Clear and re-add items
-            trip.items.removeAll()
-        } else {
-            trip = GroceryTrip(date: date, storeName: storeName.isEmpty ? nil : storeName)
-            context.insert(trip)
-        }
-
-        for item in items {
-            item.trip = trip
-            trip.items.append(item)
-        }
-
-        try? context.save()
-        dismiss()
+        .navigationTitle("Trip Details")
     }
 }
 ```
 
-### Step 3: Create ItemEditView
-
-Create `ProjectX/Views/Home/ItemEditView.swift`:
-
-```swift
-import SwiftUI
-import SwiftData
-
-struct ItemEditView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var name: String
-    @State private var quantity: String
-    @State private var price: String
-    @State private var selectedFood: Food?
-    @State private var isSkipped: Bool
-
-    private let existingItem: PurchasedItem?
-    private let foods: [Food]
-    private let onSave: (PurchasedItem) -> Void
-
-    init(item: PurchasedItem?, foods: [Food], onSave: @escaping (PurchasedItem) -> Void) {
-        self.existingItem = item
-        self.foods = foods
-        self.onSave = onSave
-        _name = State(initialValue: item?.name ?? "")
-        _quantity = State(initialValue: item != nil ? String(format: "%.0f", item!.quantity) : "")
-        _price = State(initialValue: item != nil ? String(format: "%.2f", item!.price) : "")
-        _selectedFood = State(initialValue: item?.food)
-        _isSkipped = State(initialValue: item?.isSkipped ?? false)
-    }
-
-    var body: some View {
-        Form {
-            Section("Item Details") {
-                TextField("Name", text: $name)
-                HStack {
-                    TextField("Quantity", text: $quantity)
-                        .keyboardType(.numberPad)
-                    Text("g")
-                        .foregroundStyle(.secondary)
-                }
-                HStack {
-                    TextField("Price", text: $price)
-                        .keyboardType(.decimalPad)
-                }
-            }
-
-            Section("Link to Food") {
-                Picker("Food", selection: $selectedFood) {
-                    Text("None").tag(nil as Food?)
-                    ForEach(foods) { food in
-                        Text(food.name).tag(food as Food?)
-                    }
-                }
-
-                if let food = selectedFood, let nutrition = food.nutrition {
-                    let qty = Double(quantity) ?? 0
-                    let scaled = nutrition.scaled(byGrams: qty)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Estimated nutrition for \(Int(qty))g:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("\(Int(scaled.calories)) kcal, \(Int(scaled.protein))g protein")
-                            .font(.caption)
-                    }
-                }
-            }
-
-            Section {
-                Toggle("Skip this item", isOn: $isSkipped)
-            } footer: {
-                Text("Skipped items won't count toward nutrition totals")
-            }
-        }
-        .navigationTitle(existingItem == nil ? "Add Item" : "Edit Item")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    let item = existingItem ?? PurchasedItem(
-                        name: name,
-                        quantity: Double(quantity) ?? 0,
-                        price: Double(price) ?? 0
-                    )
-                    item.name = name
-                    item.quantity = Double(quantity) ?? 0
-                    item.price = Double(price) ?? 0
-                    item.food = selectedFood
-                    item.isSkipped = isSkipped
-                    onSave(item)
-                }
-                .disabled(name.isEmpty || quantity.isEmpty)
-            }
-        }
-    }
-}
-```
-
-### Step 4: Commit
-
-```bash
-git add ProjectX/Views/Home
-git commit -m "feat: add Home tab with trip management"
-```
-
----
-
-## Task 5: Analysis Tab
-
-**Files:**
-- Create: `ProjectX/Views/Analysis/AnalysisView.swift`
-
-### Step 1: Create AnalysisView
+### Step 3: Create AnalysisView
 
 Create `ProjectX/Views/Analysis/AnalysisView.swift`:
 
@@ -928,18 +1725,14 @@ import SwiftData
 struct AnalysisView: View {
     @Query(sort: \GroceryTrip.date) private var trips: [GroceryTrip]
 
-    private var allTimeSummary: NutritionSummary {
-        NutritionSummary.forTrips(trips)
-    }
+    private var allTime: NutritionSummary { NutritionSummary.forTrips(trips) }
 
-    private var last7DaysTrips: [GroceryTrip] {
+    private var last7Days: [GroceryTrip] {
         let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now
         return trips.filter { $0.date >= cutoff }
     }
 
-    private var last7DaysSummary: NutritionSummary {
-        NutritionSummary.forTrips(last7DaysTrips)
-    }
+    private var last7Summary: NutritionSummary { NutritionSummary.forTrips(last7Days) }
 
     var body: some View {
         NavigationStack {
@@ -949,12 +1742,12 @@ struct AnalysisView: View {
                         ContentUnavailableView(
                             "No Data Yet",
                             systemImage: "chart.bar.doc.horizontal",
-                            description: Text("Add grocery trips to see nutrition analysis")
+                            description: Text("Scan receipts to see nutrition analysis")
                         )
                         .padding(.top, 100)
                     } else {
-                        SummaryCard(title: "Last 7 Days", summary: last7DaysSummary, tripCount: last7DaysTrips.count)
-                        SummaryCard(title: "All Time", summary: allTimeSummary, tripCount: trips.count)
+                        SummaryCard(title: "Last 7 Days", summary: last7Summary, count: last7Days.count)
+                        SummaryCard(title: "All Time", summary: allTime, count: trips.count)
                     }
                 }
                 .padding()
@@ -967,43 +1760,33 @@ struct AnalysisView: View {
 private struct SummaryCard: View {
     let title: String
     let summary: NutritionSummary
-    let tripCount: Int
+    let count: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(title)
-                    .font(.headline)
+                Text(title).font(.headline)
                 Spacer()
-                Text("\(tripCount) trip\(tripCount == 1 ? "" : "s")")
+                Text("\(count) trip\(count == 1 ? "" : "s")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
             Divider()
-
             HStack {
-                StatItem(label: "Calories", value: "\(Int(summary.totalCalories))", unit: "kcal")
+                Stat(label: "Calories", value: "\(Int(summary.totalCalories))", unit: "kcal")
                 Spacer()
-                StatItem(label: "Protein", value: String(format: "%.0f", summary.totalProtein), unit: "g")
+                Stat(label: "Protein", value: "\(Int(summary.totalProtein))", unit: "g")
                 Spacer()
-                StatItem(label: "Carbs", value: String(format: "%.0f", summary.totalCarbohydrates), unit: "g")
+                Stat(label: "Carbs", value: "\(Int(summary.totalCarbohydrates))", unit: "g")
                 Spacer()
-                StatItem(label: "Fat", value: String(format: "%.0f", summary.totalFat), unit: "g")
+                Stat(label: "Fat", value: "\(Int(summary.totalFat))", unit: "g")
             }
-
             Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Health Markers")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    MiniStat(label: "Sat. Fat", value: summary.totalSaturatedFat, unit: "g")
-                    MiniStat(label: "Sugar", value: summary.totalSugar, unit: "g")
-                    MiniStat(label: "Fiber", value: summary.totalFiber, unit: "g")
-                    MiniStat(label: "Sodium", value: summary.totalSodium, unit: "mg")
-                }
+            HStack {
+                Mini(label: "Sat. Fat", value: summary.totalSaturatedFat)
+                Mini(label: "Sugar", value: summary.totalSugar)
+                Mini(label: "Fiber", value: summary.totalFiber)
+                Mini(label: "Sodium", value: summary.totalSodium)
             }
         }
         .padding()
@@ -1012,146 +1795,141 @@ private struct SummaryCard: View {
     }
 }
 
-private struct StatItem: View {
-    let label: String
-    let value: String
-    let unit: String
-
+private struct Stat: View {
+    let label, value, unit: String
     var body: some View {
         VStack(spacing: 2) {
-            Text(value)
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text("\(label) (\(unit))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Text(value).font(.title2).fontWeight(.semibold)
+            Text("\(label) (\(unit))").font(.caption2).foregroundStyle(.secondary)
         }
     }
 }
 
-private struct MiniStat: View {
+private struct Mini: View {
     let label: String
     let value: Double
-    let unit: String
-
     var body: some View {
         VStack(spacing: 2) {
-            Text(String(format: "%.0f", value))
-                .font(.subheadline)
-                .fontWeight(.medium)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Text("\(Int(value))").font(.subheadline).fontWeight(.medium)
+            Text(label).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
     }
 }
 ```
 
-### Step 2: Commit
+### Step 4: Commit
 
 ```bash
-git add ProjectX/Views/Analysis
-git commit -m "feat: add Analysis tab with nutrition summaries"
+git add ProjectX/Views/Home ProjectX/Views/Analysis
+git commit -m "feat: add Home and Analysis tabs"
 ```
 
 ---
 
-## Task 6: Scan & Settings Stubs
+## Task 8: Settings View
 
 **Files:**
-- Create: `ProjectX/Views/Scan/ScanView.swift`
 - Create: `ProjectX/Views/Settings/SettingsView.swift`
 
-### Step 1: Create ScanView stub
-
-Create `ProjectX/Views/Scan/ScanView.swift`:
-
-```swift
-import SwiftUI
-
-struct ScanView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-
-                Image(systemName: "camera.viewfinder")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.tertiary)
-
-                VStack(spacing: 8) {
-                    Text("Receipt Scanning")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-
-                    Text("Coming Soon")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text("In a future version, you'll be able to photograph grocery receipts and have AI extract all items automatically.\n\nFor now, add trips manually from the Home tab.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                Spacer()
-            }
-            .navigationTitle("Scan")
-        }
-    }
-}
-```
-
-### Step 2: Create SettingsView stub
+### Step 1: Create SettingsView
 
 Create `ProjectX/Views/Settings/SettingsView.swift`:
 
 ```swift
 import SwiftUI
 
-enum LLMProvider: String, CaseIterable, Identifiable {
-    case openAI = "OpenAI"
-    case anthropic = "Anthropic"
-
-    var id: String { rawValue }
-}
-
 struct SettingsView: View {
-    @AppStorage("llmProvider") private var providerRaw: String = LLMProvider.openAI.rawValue
-    @AppStorage("apiKey") private var apiKey: String = ""
-
-    private var provider: LLMProvider {
-        LLMProvider(rawValue: providerRaw) ?? .openAI
-    }
+    @Bindable var settings: AppSettings
+    @State private var showOpenAI = false
+    @State private var showAnthropic = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Provider", selection: $providerRaw) {
+                    Picker("Provider", selection: $settings.selectedProvider) {
                         ForEach(LLMProvider.allCases) { p in
-                            Text(p.rawValue).tag(p.rawValue)
+                            Text(p.rawValue).tag(p)
                         }
                     }
+                    .pickerStyle(.segmented)
                 } header: {
                     Text("LLM Provider")
-                } footer: {
-                    Text("Select the AI service to use for receipt scanning (coming soon)")
                 }
 
                 Section {
-                    SecureField("API Key", text: $apiKey)
+                    HStack {
+                        Text("OpenAI")
+                        Spacer()
+                        if !settings.openAIAPIKey.isEmpty {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    HStack {
+                        Group {
+                            if showOpenAI {
+                                TextField("sk-...", text: $settings.openAIAPIKey)
+                            } else {
+                                SecureField("sk-...", text: $settings.openAIAPIKey)
+                            }
+                        }
                         .textContentType(.password)
+                        .autocorrectionDisabled()
+
+                        Button { showOpenAI.toggle() } label: {
+                            Image(systemName: showOpenAI ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+
+                    HStack {
+                        Text("Anthropic")
+                        Spacer()
+                        if !settings.anthropicAPIKey.isEmpty {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    HStack {
+                        Group {
+                            if showAnthropic {
+                                TextField("sk-ant-...", text: $settings.anthropicAPIKey)
+                            } else {
+                                SecureField("sk-ant-...", text: $settings.anthropicAPIKey)
+                            }
+                        }
+                        .textContentType(.password)
+                        .autocorrectionDisabled()
+
+                        Button { showAnthropic.toggle() } label: {
+                            Image(systemName: showAnthropic ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 } header: {
-                    Text("API Key")
+                    Text("API Keys")
                 } footer: {
-                    Text("Your API key is stored locally on this device. LLM features are not yet active in this version.")
+                    Text("Keys are stored securely in iOS Keychain")
+                }
+
+                Section {
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        if settings.isConfigured {
+                            Label("Ready", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Label("Key required", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
                 }
 
                 Section("About") {
-                    LabeledContent("Version", value: "1.0.0 (MVP)")
+                    LabeledContent("Version", value: "1.0.0")
                 }
             }
             .navigationTitle("Settings")
@@ -1160,16 +1938,16 @@ struct SettingsView: View {
 }
 ```
 
-### Step 3: Commit
+### Step 2: Commit
 
 ```bash
-git add ProjectX/Views/Scan ProjectX/Views/Settings
-git commit -m "feat: add Scan and Settings stub views"
+git add ProjectX/Views/Settings
+git commit -m "feat: add Settings with secure API key management"
 ```
 
 ---
 
-## Task 7: Final Integration & QA
+## Task 9: Final Integration & QA
 
 ### Step 1: Build and test
 
@@ -1180,19 +1958,27 @@ xcodebuild test -project ProjectX.xcodeproj -scheme ProjectX -destination 'platf
 
 ### Step 2: Manual QA checklist
 
-- [ ] Food Bank: Add, edit, delete foods with nutrition data
-- [ ] Home: Create trips, add items, link to foods
-- [ ] Home: Edit and delete trips
-- [ ] Analysis: Verify summaries update with trip data
-- [ ] Scan: Shows "Coming Soon" message
-- [ ] Settings: Provider picker and API key field work (stored locally)
+- [ ] Settings: Add API key, verify stored in Keychain
+- [ ] Settings: Switch providers, verify key association
+- [ ] Scan: Take photo or select image
+- [ ] Scan: Verify LLM extracts items with grams and prices
+- [ ] Scan: Review items, skip/link/add new foods
+- [ ] Scan: Save trip successfully
+- [ ] Food Bank: Add food manually
+- [ ] Food Bank: Use AI estimate for nutrition
+- [ ] Food Bank: Scan nutrition label
+- [ ] Food Bank: Edit and delete foods
+- [ ] Home: View trips list
+- [ ] Home: View trip details with nutrition
+- [ ] Home: Delete trips
+- [ ] Analysis: View 7-day and all-time summaries
 - [ ] App persists data across launches
 
 ### Step 3: Final commit
 
 ```bash
 git add .
-git commit -m "feat: complete MVP implementation"
+git commit -m "feat: complete MVP with LLM integration"
 ```
 
 ---
@@ -1200,18 +1986,85 @@ git commit -m "feat: complete MVP implementation"
 ## Summary
 
 **MVP Features:**
-1. SwiftData models: Food, NutritionInfo, GroceryTrip, PurchasedItem
-2. All quantities in grams (PRD compliant)
-3. Food Bank with CRUD operations
-4. Grocery trip management with item linking
-5. Nutrition analysis (all-time + last 7 days)
-6. Stub screens for Scan and Settings
+1. SwiftData models: Food, NutritionInfo, GroceryTrip, PurchasedItem, Tag
+2. All quantities in grams (LLM converts from kg/L/pcs)
+3. LLM service layer: OpenAI + Claude support
+4. Secure API key storage via Keychain with validation
+5. Receipt scanning with AI extraction (image or text input)
+6. Receipt review flow with food matching
+7. Food Bank with AI nutrition estimation + label scanning
+8. Nutrition analysis (7-day + all-time)
+9. Two-level food category system (Main Category + Subcategory)
+10. Tag system for food labeling with default tags
+11. Default data management with restore functionality
 
-**Files:** ~15 Swift files
+**Files:** ~30 Swift files
 
-**Post-MVP (when adding LLM):**
-- Implement `LLMService` protocol
-- Add `OpenAIService` and `ClaudeService`
-- Add `KeychainHelper` for secure API key storage
-- Update `ScanView` with camera/photo picker
-- Add receipt review flow
+**Use Cases Covered:**
+| Use Case | Status |
+|----------|--------|
+| Scan receipt photo | Yes |
+| Enter receipt text | Yes |
+| LLM extracts items (translated, grams) | Yes |
+| Review/edit extracted items | Yes |
+| Link items to Food Bank | Yes |
+| Add new food with AI estimate | Yes |
+| Scan nutrition label (image or text) | Yes |
+| Manual food entry | Yes |
+| View grocery trips | Yes |
+| View trip nutrition | Yes |
+| View 7-day summary | Yes |
+| View all-time summary | Yes |
+| Secure API key storage | Yes |
+| API key validation on save | Yes |
+| Two-level food categories | Yes |
+| Tag foods with custom labels | Yes |
+| Filter by category/tag | Yes |
+| Restore default tags | Yes |
+
+---
+
+## Recent Updates
+
+### Food Category System (Simplified)
+
+Two-level hierarchical category system focused on food types:
+
+**Level 1 - Main Categories:**
+- Vegetables, Fruits, Meat & Poultry, Seafood, Dairy & Eggs
+- Grains & Bread, Legumes & Beans, Nuts & Seeds, Oils & Fats
+- Snacks & Sweets, Beverages, Other
+
+**Level 2 - Subcategories:**
+- Each main category has relevant subcategories (e.g., Meat: Poultry, Red Meat, Processed Meat)
+- Subcategory selection is optional
+
+**Files:**
+- `ProjectX/Models/FoodCategory.swift` - Category enums and FoodCategory struct
+- `ProjectX/Views/Components/CategoryPicker.swift` - Hierarchical category picker UI
+
+### Tag System
+
+Flexible tagging system for food labeling:
+
+**Features:**
+- Create custom tags with name and color
+- Attach multiple tags to any food
+- Filter Food Bank by tags
+- Default tags for common use cases (Organic, High Protein, Red Meat, etc.)
+
+**Default Tags:**
+- Organic, Local, High Protein, Low Carb, Plant-Based, Whole Food
+- Processed, Red Meat, High Fiber, Omega-3 Rich, Low Sodium, Sugar-Free
+
+**Files:**
+- `ProjectX/Models/Tag.swift` - Tag model with color support
+- `ProjectX/Views/Components/TagPicker.swift` - Tag selection/creation UI
+- `ProjectX/Services/DefaultDataManager.swift` - Default data management
+
+### Data Management
+
+- Default tags created on first launch
+- Restore default tags in Settings (Add Missing or Reset All)
+- Proper error handling for all save operations
+- Fixed orphaned item deletion when editing trips

@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Bindable var settings: AppSettings
+
     var body: some View {
         TabView {
             HomeView()
@@ -15,12 +17,12 @@ struct ContentView: View {
                     Label("Home", systemImage: "house.fill")
                 }
 
-            ScanView()
+            ScanView(settings: settings)
                 .tabItem {
                     Label("Scan", systemImage: "camera.viewfinder")
                 }
 
-            FoodBankView()
+            FoodBankView(settings: settings)
                 .tabItem {
                     Label("Food Bank", systemImage: "fork.knife")
                 }
@@ -30,7 +32,7 @@ struct ContentView: View {
                     Label("Analysis", systemImage: "chart.bar.fill")
                 }
 
-            SettingsView()
+            SettingsView(settings: settings)
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
                 }

@@ -9,8 +9,10 @@ struct TripDetailView: View {
     @State private var date: Date
     @State private var storeName: String
     @State private var items: [PurchasedItem]
+    @State private var deletedItems: [PurchasedItem] = []
     @State private var editingItem: PurchasedItem?
     @State private var showingAddItem = false
+    @State private var showingSaveError = false
 
     private var existingTrip: GroceryTrip?
     private var isNewTrip: Bool { existingTrip == nil }
@@ -101,9 +103,21 @@ struct TripDetailView: View {
                 }
             }
         }
+        .alert("Save Error", isPresented: $showingSaveError) {
+            Button("OK") {}
+        } message: {
+            Text("Failed to save changes. Please try again.")
+        }
     }
 
     private func deleteItems(at offsets: IndexSet) {
+        for index in offsets {
+            let item = items[index]
+            // Track for deletion if it was previously saved
+            if item.trip != nil {
+                deletedItems.append(item)
+            }
+        }
         items.remove(atOffsets: offsets)
     }
 
@@ -114,6 +128,12 @@ struct TripDetailView: View {
             trip.date = date
             trip.storeName = storeName.isEmpty ? nil : storeName
             trip.updatedAt = .now
+
+            // Delete removed items from persistence
+            for item in deletedItems {
+                context.delete(item)
+            }
+
             trip.items.removeAll()
         } else {
             trip = GroceryTrip(date: date, storeName: storeName.isEmpty ? nil : storeName)
@@ -125,7 +145,11 @@ struct TripDetailView: View {
             trip.items.append(item)
         }
 
-        try? context.save()
-        dismiss()
+        do {
+            try context.save()
+            dismiss()
+        } catch {
+            showingSaveError = true
+        }
     }
 }

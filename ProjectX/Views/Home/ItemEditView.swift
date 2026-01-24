@@ -27,17 +27,37 @@ struct ItemEditView: View {
 
     var body: some View {
         Form {
-            Section("Item Details") {
+            Section {
                 TextField("Name", text: $name)
                 HStack {
                     TextField("Quantity", text: $quantity)
-                        .keyboardType(.numberPad)
+                        .keyboardType(.decimalPad)
+                        .onChange(of: quantity) { _, newValue in
+                            // Allow only valid decimal input
+                            let filtered = newValue.filter { $0.isNumber || $0 == "." }
+                            if filtered != newValue {
+                                quantity = filtered
+                            }
+                        }
                     Text("g")
                         .foregroundStyle(.secondary)
                 }
                 HStack {
                     TextField("Price", text: $price)
                         .keyboardType(.decimalPad)
+                        .onChange(of: price) { _, newValue in
+                            let filtered = newValue.filter { $0.isNumber || $0 == "." }
+                            if filtered != newValue {
+                                price = filtered
+                            }
+                        }
+                }
+            } header: {
+                Text("Item Details")
+            } footer: {
+                if !quantity.isEmpty && Double(quantity) == nil {
+                    Text("Please enter a valid number for quantity")
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -76,19 +96,20 @@ struct ItemEditView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
+                    guard let qty = Double(quantity), let prc = Double(price) else { return }
                     let item = existingItem ?? PurchasedItem(
                         name: name,
-                        quantity: Double(quantity) ?? 0,
-                        price: Double(price) ?? 0
+                        quantity: qty,
+                        price: prc
                     )
                     item.name = name
-                    item.quantity = Double(quantity) ?? 0
-                    item.price = Double(price) ?? 0
+                    item.quantity = qty
+                    item.price = prc
                     item.food = selectedFood
                     item.isSkipped = isSkipped
                     onSave(item)
                 }
-                .disabled(name.isEmpty || quantity.isEmpty)
+                .disabled(name.isEmpty || Double(quantity) == nil || Double(price) == nil)
             }
         }
     }

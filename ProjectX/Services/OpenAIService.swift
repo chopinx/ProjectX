@@ -10,6 +10,41 @@ final class OpenAIService: LLMService {
         self.apiKey = apiKey
     }
 
+    func validateAPIKey() async throws {
+        // Send a minimal request to validate the key
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "user", "content": "Hi"]
+            ],
+            "max_tokens": 1
+        ]
+
+        var request = URLRequest(url: URL(string: baseURL)!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LLMError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw LLMError.invalidAPIKey
+        }
+
+        if httpResponse.statusCode == 429 {
+            throw LLMError.rateLimited
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw LLMError.invalidResponse
+        }
+    }
+
     func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem] {
         let base64Image = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
 
@@ -71,6 +106,73 @@ final class OpenAIService: LLMService {
         """
 
         let response = try await sendVisionRequest(prompt: prompt, imageBase64: base64Image)
+        return try parseJSON(response, as: ExtractedNutrition.self)
+    }
+
+    func extractReceiptItems(from text: String) async throws -> [ExtractedReceiptItem] {
+        let prompt = """
+        Parse this grocery receipt text and extract all food items.
+        Translate any non-English text to English.
+
+        Receipt text:
+        \(text)
+
+        Return a JSON array with this exact structure:
+        [
+          {
+            "name": "English food name",
+            "quantity_grams": 1000,
+            "price": 2.99,
+            "category": "produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other"
+          }
+        ]
+
+        Rules:
+        - Translate German/other languages to English
+        - Convert ALL quantities to grams:
+          - "1 kg" → 1000
+          - "500 ml" → 500 (treat 1ml ≈ 1g)
+          - "2 pcs" → estimate weight (e.g., "2 apples" → 360)
+          - "1.5 L" → 1500
+        - If quantity is not specified, estimate a reasonable default
+        - Price should be a number without currency symbol
+        - Only return the JSON array, no other text
+        """
+
+        let response = try await sendTextRequest(prompt: prompt)
+        return try parseJSON(response, as: [ExtractedReceiptItem].self)
+    }
+
+    func extractNutritionLabel(from text: String) async throws -> ExtractedNutrition {
+        let prompt = """
+        Parse this nutrition label text and extract nutrition values.
+        Convert all values to per 100g.
+
+        Nutrition label text:
+        \(text)
+
+        Return JSON with this exact structure:
+        {
+          "calories": 0,
+          "protein": 0,
+          "carbohydrates": 0,
+          "fat": 0,
+          "saturatedFat": 0,
+          "sugar": 0,
+          "fiber": 0,
+          "sodium": 0
+        }
+
+        Rules:
+        - All values per 100g
+        - Calories in kcal
+        - Protein, carbs, fat, saturatedFat, sugar, fiber in grams
+        - Sodium in mg
+        - If a value is not shown, use 0
+        - Only return the JSON object, no other text
+        """
+
+        let response = try await sendTextRequest(prompt: prompt)
         return try parseJSON(response, as: ExtractedNutrition.self)
     }
 

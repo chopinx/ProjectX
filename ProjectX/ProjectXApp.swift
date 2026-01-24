@@ -10,12 +10,15 @@ import SwiftData
 
 @main
 struct ProjectXApp: App {
+    @State private var settings = AppSettings()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Food.self,
             NutritionInfo.self,
             GroceryTrip.self,
-            PurchasedItem.self
+            PurchasedItem.self,
+            Tag.self
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
@@ -31,8 +34,17 @@ struct ProjectXApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(settings: settings)
+                .onAppear {
+                    setupDefaultData()
+                }
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    private func setupDefaultData() {
+        let context = sharedModelContainer.mainContext
+        let manager = DefaultDataManager(modelContext: context)
+        manager.setupDefaultData()
     }
 }

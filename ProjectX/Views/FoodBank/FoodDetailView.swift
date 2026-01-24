@@ -7,6 +7,7 @@ struct FoodDetailView: View {
 
     @State private var name: String
     @State private var category: FoodCategory
+    @State private var selectedTags: [Tag]
     @State private var calories: String
     @State private var protein: String
     @State private var carbohydrates: String
@@ -15,6 +16,7 @@ struct FoodDetailView: View {
     @State private var sugar: String
     @State private var fiber: String
     @State private var sodium: String
+    @State private var showingSaveError = false
 
     private var existingFood: Food?
 
@@ -22,6 +24,7 @@ struct FoodDetailView: View {
         self.existingFood = food
         _name = State(initialValue: food?.name ?? "")
         _category = State(initialValue: food?.category ?? .other)
+        _selectedTags = State(initialValue: food?.tags ?? [])
         _calories = State(initialValue: Self.format(food?.nutrition?.calories))
         _protein = State(initialValue: Self.format(food?.nutrition?.protein))
         _carbohydrates = State(initialValue: Self.format(food?.nutrition?.carbohydrates))
@@ -36,12 +39,10 @@ struct FoodDetailView: View {
         Form {
             Section("Basic Info") {
                 TextField("Name", text: $name)
-                Picker("Category", selection: $category) {
-                    ForEach(FoodCategory.allCases) { cat in
-                        Label(cat.displayName, systemImage: cat.icon).tag(cat)
-                    }
-                }
+                CategoryPicker(selection: $category)
             }
+
+            TagPicker(selectedTags: $selectedTags)
 
             Section("Nutrition per 100g") {
                 NutritionField(label: "Calories", value: $calories, unit: "kcal")
@@ -65,6 +66,11 @@ struct FoodDetailView: View {
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+        .alert("Save Error", isPresented: $showingSaveError) {
+            Button("OK") {}
+        } message: {
+            Text("Failed to save changes. Please try again.")
+        }
     }
 
     private func save() {
@@ -82,15 +88,20 @@ struct FoodDetailView: View {
         if let food = existingFood {
             food.name = name
             food.category = category
+            food.tags = selectedTags
             food.nutrition = nutrition
             food.updatedAt = .now
         } else {
-            let food = Food(name: name, category: category, nutrition: nutrition)
+            let food = Food(name: name, category: category, nutrition: nutrition, tags: selectedTags)
             context.insert(food)
         }
 
-        try? context.save()
-        dismiss()
+        do {
+            try context.save()
+            dismiss()
+        } catch {
+            showingSaveError = true
+        }
     }
 
     private static func format(_ value: Double?) -> String {
