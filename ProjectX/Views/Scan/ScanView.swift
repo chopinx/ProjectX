@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 struct ScanView: View {
     var settings: AppSettings
-    @Environment(\.importManager) private var importManager
 
     @State private var showCamera = false
     @State private var showPhotoPicker = false
@@ -12,9 +11,9 @@ struct ScanView: View {
     @State private var showTextInput = false
     @State private var showScanTypeSelection = false
 
-    @State private var capturedImage: UIImage?
-    @State private var importedPDFData: Data?
     @State private var receiptText = ""
+    @State private var pendingOCRText: String?
+    @State private var selectedScanType: ScanType?
 
     @State private var showReviewFromText = false
     @State private var showNutritionFromText = false
@@ -22,27 +21,16 @@ struct ScanView: View {
     @State private var isProcessingOCR = false
     @State private var errorMessage: String?
 
-    @State private var pendingOCRText: String?
-    @State private var selectedScanType: ScanType?
-
     enum ScanType: String, CaseIterable, Identifiable {
         case receipt = "Receipt"
         case nutritionLabel = "Nutrition Label"
 
         var id: String { rawValue }
-
         var icon: String {
-            switch self {
-            case .receipt: return "doc.text.viewfinder"
-            case .nutritionLabel: return "chart.bar.doc.horizontal"
-            }
+            self == .receipt ? "doc.text.viewfinder" : "chart.bar.doc.horizontal"
         }
-
         var description: String {
-            switch self {
-            case .receipt: return "Extract grocery items and prices"
-            case .nutritionLabel: return "Extract nutrition information"
-            }
+            self == .receipt ? "Extract grocery items and prices" : "Extract nutrition information"
         }
     }
 
@@ -51,13 +39,11 @@ struct ScanView: View {
             ZStack {
                 VStack(spacing: 24) {
                     Spacer()
-
                     if !settings.isConfigured {
                         configurationRequiredView
                     } else {
                         scanOptionsView
                     }
-
                     Spacer()
                 }
 
@@ -88,7 +74,13 @@ struct ScanView: View {
                 }
             }
             .sheet(isPresented: $showTextInput) {
-                ReceiptTextInputView(text: $receiptText) {
+                TextInputSheet(
+                    text: $receiptText,
+                    title: "Enter Text",
+                    placeholder: "Paste or type your receipt/label text below",
+                    example: "Example:\nApples 1kg 2.99\nMilk 1L 1.49\nBread 500g 2.29",
+                    buttonTitle: "Continue"
+                ) {
                     showTextInput = false
                     if !receiptText.isEmpty {
                         pendingOCRText = receiptText
@@ -113,7 +105,7 @@ struct ScanView: View {
             }
             .navigationDestination(isPresented: $showNutritionFromText) {
                 if let text = pendingOCRText {
-                    NutritionLabelFromTextView(text: text, settings: settings)
+                    NutritionLabelResultView(text: text, settings: settings)
                 }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
@@ -129,11 +121,9 @@ struct ScanView: View {
             Image(systemName: "key.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.orange)
-
             Text("API Key Required")
                 .font(.title2)
                 .fontWeight(.semibold)
-
             Text("Please configure your API key in Settings to enable scanning.")
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -152,32 +142,25 @@ struct ScanView: View {
                 Text("Scan Receipt or Label")
                     .font(.title2)
                     .fontWeight(.semibold)
-
                 Text("Take a photo, import a file, or enter text")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 12) {
-                Button {
-                    showCamera = true
-                } label: {
+                Button { showCamera = true } label: {
                     Label("Take Photo", systemImage: "camera.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button {
-                    showPhotoPicker = true
-                } label: {
+                Button { showPhotoPicker = true } label: {
                     Label("Choose from Library", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
 
-                Button {
-                    showDocumentPicker = true
-                } label: {
+                Button { showDocumentPicker = true } label: {
                     Label("Import PDF or Image", systemImage: "doc.badge.plus")
                         .frame(maxWidth: .infinity)
                 }
@@ -198,14 +181,11 @@ struct ScanView: View {
 
     private var ocrProcessingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-
+            Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: 16) {
                 ProgressView()
                     .scaleEffect(1.5)
                     .tint(.white)
-
                 Text("Extracting text...")
                     .font(.headline)
                     .foregroundStyle(.white)
@@ -219,33 +199,23 @@ struct ScanView: View {
     private func handleImageCaptured(_ image: UIImage) {
         showCamera = false
         showPhotoPicker = false
-        capturedImage = image
-
-        Task {
-            await performOCR(from: .image(image))
-        }
+        Task { await performOCR(from: .image(image)) }
     }
 
     private func handleDocumentPicked(_ url: URL) {
         let ext = url.pathExtension.lowercased()
-
         if ext == "pdf" {
             guard let data = try? Data(contentsOf: url) else {
                 errorMessage = "Failed to read PDF file"
                 return
             }
-            Task {
-                await performOCR(from: .pdf(data))
-            }
+            Task { await performOCR(from: .pdf(data)) }
         } else if ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) {
-            guard let data = try? Data(contentsOf: url),
-                  let image = UIImage(data: data) else {
+            guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
                 errorMessage = "Failed to read image file"
                 return
             }
-            Task {
-                await performOCR(from: .image(image))
-            }
+            Task { await performOCR(from: .image(image)) }
         } else {
             errorMessage = "Unsupported file type"
         }
@@ -255,9 +225,8 @@ struct ScanView: View {
         isProcessingOCR = true
         defer { isProcessingOCR = false }
 
-        let manager = ImportManager()
         do {
-            let text = try await manager.processImport(source)
+            let text = try await ImportManager().processImport(source)
             pendingOCRText = text
             showScanTypeSelection = true
         } catch {
@@ -268,12 +237,9 @@ struct ScanView: View {
     private func handleScanTypeSelected(_ type: ScanType) {
         showScanTypeSelection = false
         selectedScanType = type
-
         switch type {
-        case .receipt:
-            showReviewFromText = true
-        case .nutritionLabel:
-            showNutritionFromText = true
+        case .receipt: showReviewFromText = true
+        case .nutritionLabel: showNutritionFromText = true
         }
     }
 }
@@ -293,24 +259,18 @@ struct ScanTypeSelectionSheet: View {
 
                 VStack(spacing: 16) {
                     ForEach(ScanView.ScanType.allCases) { type in
-                        Button {
-                            onSelect(type)
-                        } label: {
+                        Button { onSelect(type) } label: {
                             HStack(spacing: 16) {
                                 Image(systemName: type.icon)
                                     .font(.title2)
                                     .frame(width: 40)
-
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(type.rawValue)
-                                        .font(.headline)
+                                    Text(type.rawValue).font(.headline)
                                     Text(type.description)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-
                                 Spacer()
-
                                 Image(systemName: "chevron.right")
                                     .foregroundStyle(.secondary)
                             }
@@ -322,7 +282,6 @@ struct ScanTypeSelectionSheet: View {
                     }
                 }
                 .padding(.horizontal)
-
                 Spacer()
             }
             .navigationTitle("Select Type")
@@ -336,55 +295,9 @@ struct ScanTypeSelectionSheet: View {
     }
 }
 
-// MARK: - Text Input View
+// MARK: - Nutrition Label Result View
 
-struct ReceiptTextInputView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var text: String
-    let onSubmit: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Text("Paste or type your receipt/label text below")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                TextEditor(text: $text)
-                    .font(.body)
-                    .padding(8)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .frame(minHeight: 200)
-
-                Text("Example:\nApples 1kg 2.99\nMilk 1L 1.49\nBread 500g 2.29")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Enter Text")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Continue") {
-                        onSubmit()
-                    }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Nutrition Label From Text View
-
-struct NutritionLabelFromTextView: View {
+struct NutritionLabelResultView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
 
@@ -401,82 +314,49 @@ struct NutritionLabelFromTextView: View {
     var body: some View {
         Group {
             if isLoading {
-                loadingView
+                ProgressView()
+                    .scaleEffect(1.5)
             } else if let error = errorMessage {
-                errorView(error)
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 50))
+                        .foregroundStyle(.orange)
+                    Text("Extraction Failed").font(.title3).fontWeight(.semibold)
+                    Text(error).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Button("Try Again") { Task { await extractNutrition() } }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding()
             } else if let nutrition = extractedNutrition {
-                resultView(nutrition)
+                Form {
+                    Section("Food Details") {
+                        TextField("Food Name", text: $foodName)
+                        CategoryPicker(selection: $category)
+                    }
+                    Section("Extracted Nutrition (per 100g)") {
+                        LabeledContent("Calories", value: "\(Int(nutrition.calories)) kcal")
+                        LabeledContent("Protein", value: String(format: "%.1fg", nutrition.protein))
+                        LabeledContent("Carbohydrates", value: String(format: "%.1fg", nutrition.carbohydrates))
+                        LabeledContent("Fat", value: String(format: "%.1fg", nutrition.fat))
+                        LabeledContent("Saturated Fat", value: String(format: "%.1fg", nutrition.saturatedFat))
+                        LabeledContent("Sugar", value: String(format: "%.1fg", nutrition.sugar))
+                        LabeledContent("Fiber", value: String(format: "%.1fg", nutrition.fiber))
+                        LabeledContent("Sodium", value: String(format: "%.0fmg", nutrition.sodium))
+                    }
+                    Section {
+                        Button("Save to Food Bank") { saveFood(nutrition) }
+                            .disabled(foodName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
             }
         }
         .navigationTitle("Nutrition Label")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await extractNutrition()
-        }
+        .task { await extractNutrition() }
         .alert("Saved!", isPresented: $showingSaveSuccess) {
             Button("OK") { dismiss() }
         } message: {
             Text("Food has been added to your Food Bank")
-        }
-    }
-
-    private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.5)
-            Text("Extracting nutrition info...")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 50))
-                .foregroundStyle(.orange)
-
-            Text("Extraction Failed")
-                .font(.title3)
-                .fontWeight(.semibold)
-
-            Text(message)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Button("Try Again") {
-                Task { await extractNutrition() }
-            }
-            .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private func resultView(_ nutrition: ExtractedNutrition) -> some View {
-        Form {
-            Section("Food Details") {
-                TextField("Food Name", text: $foodName)
-                CategoryPicker(selection: $category)
-            }
-
-            Section("Extracted Nutrition (per 100g)") {
-                LabeledContent("Calories", value: "\(Int(nutrition.calories)) kcal")
-                LabeledContent("Protein", value: String(format: "%.1fg", nutrition.protein))
-                LabeledContent("Carbohydrates", value: String(format: "%.1fg", nutrition.carbohydrates))
-                LabeledContent("Fat", value: String(format: "%.1fg", nutrition.fat))
-                LabeledContent("Saturated Fat", value: String(format: "%.1fg", nutrition.saturatedFat))
-                LabeledContent("Sugar", value: String(format: "%.1fg", nutrition.sugar))
-                LabeledContent("Fiber", value: String(format: "%.1fg", nutrition.fiber))
-                LabeledContent("Sodium", value: String(format: "%.0fmg", nutrition.sodium))
-            }
-
-            Section {
-                Button("Save to Food Bank") {
-                    saveFood(nutrition)
-                }
-                .disabled(foodName.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
         }
     }
 
@@ -492,14 +372,12 @@ struct NutritionLabelFromTextView: View {
 
         do {
             extractedNutrition = try await service.extractNutritionLabel(from: text)
-            isLoading = false
         } catch let error as LLMError {
             errorMessage = error.errorDescription
-            isLoading = false
         } catch {
             errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
-            isLoading = false
         }
+        isLoading = false
     }
 
     private func saveFood(_ nutrition: ExtractedNutrition) {
@@ -513,7 +391,6 @@ struct NutritionLabelFromTextView: View {
             fiber: nutrition.fiber,
             sodium: nutrition.sodium
         )
-
         let food = Food(name: foodName, category: category, nutrition: nutritionInfo)
         context.insert(food)
 
@@ -525,4 +402,3 @@ struct NutritionLabelFromTextView: View {
         }
     }
 }
-

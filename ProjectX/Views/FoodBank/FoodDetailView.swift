@@ -45,14 +45,14 @@ struct FoodDetailView: View {
             TagPicker(selectedTags: $selectedTags)
 
             Section("Nutrition per 100g") {
-                NutritionField(label: "Calories", value: $calories, unit: "kcal")
-                NutritionField(label: "Protein", value: $protein, unit: "g")
-                NutritionField(label: "Carbohydrates", value: $carbohydrates, unit: "g")
-                NutritionField(label: "Fat", value: $fat, unit: "g")
-                NutritionField(label: "Saturated Fat", value: $saturatedFat, unit: "g")
-                NutritionField(label: "Sugar", value: $sugar, unit: "g")
-                NutritionField(label: "Fiber", value: $fiber, unit: "g")
-                NutritionField(label: "Sodium", value: $sodium, unit: "mg")
+                NutritionFieldRow(label: "Calories", value: $calories, unit: "kcal")
+                NutritionFieldRow(label: "Protein", value: $protein, unit: "g")
+                NutritionFieldRow(label: "Carbohydrates", value: $carbohydrates, unit: "g")
+                NutritionFieldRow(label: "Fat", value: $fat, unit: "g")
+                NutritionFieldRow(label: "Saturated Fat", value: $saturatedFat, unit: "g")
+                NutritionFieldRow(label: "Sugar", value: $sugar, unit: "g")
+                NutritionFieldRow(label: "Fiber", value: $fiber, unit: "g")
+                NutritionFieldRow(label: "Sodium", value: $sodium, unit: "mg")
             }
         }
         .navigationTitle(existingFood == nil ? "New Food" : "Edit Food")
@@ -107,25 +107,5 @@ struct FoodDetailView: View {
     private static func format(_ value: Double?) -> String {
         guard let value, value != 0 else { return "" }
         return String(format: "%.1f", value)
-    }
-}
-
-private struct NutritionField: View {
-    let label: String
-    @Binding var value: String
-    let unit: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-            Spacer()
-            TextField("0", text: $value)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
-            Text(unit)
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
-        }
     }
 }

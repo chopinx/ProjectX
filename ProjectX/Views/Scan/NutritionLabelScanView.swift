@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Standalone nutrition label scanner for use from NewFoodSheet
 struct NutritionLabelScanView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -17,7 +18,10 @@ struct NutritionLabelScanView: View {
     var body: some View {
         VStack(spacing: 24) {
             if isExtracting {
-                extractingView
+                ProgressView().scaleEffect(1.5)
+                Text("Extracting nutrition info...")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
             } else if let error = errorMessage {
                 errorView(error)
             } else if let image = capturedImage {
@@ -50,7 +54,13 @@ struct NutritionLabelScanView: View {
             )
         }
         .sheet(isPresented: $showTextInput) {
-            NutritionTextInputView(text: $labelText) {
+            TextInputSheet(
+                text: $labelText,
+                title: "Enter Nutrition",
+                placeholder: "Paste or type nutrition label text below",
+                example: "Example:\nCalories 150kcal\nProtein 5g\nCarbohydrates 20g\nFat 6g",
+                buttonTitle: "Extract"
+            ) {
                 showTextInput = false
                 if !labelText.isEmpty {
                     Task { await extractNutritionFromText() }
@@ -62,7 +72,6 @@ struct NutritionLabelScanView: View {
     private var captureOptionsView: some View {
         VStack(spacing: 24) {
             Spacer()
-
             Image(systemName: "text.viewfinder")
                 .font(.system(size: 80))
                 .foregroundStyle(.blue)
@@ -71,7 +80,6 @@ struct NutritionLabelScanView: View {
                 Text("Scan Nutrition Label")
                     .font(.title2)
                     .fontWeight(.semibold)
-
                 Text("Take a photo, choose from library, or enter text")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -79,17 +87,13 @@ struct NutritionLabelScanView: View {
             }
 
             VStack(spacing: 12) {
-                Button {
-                    showCamera = true
-                } label: {
+                Button { showCamera = true } label: {
                     Label("Take Photo", systemImage: "camera.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button {
-                    showPhotoPicker = true
-                } label: {
+                Button { showPhotoPicker = true } label: {
                     Label("Choose from Library", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: .infinity)
                 }
@@ -105,19 +109,6 @@ struct NutritionLabelScanView: View {
                 .buttonStyle(.bordered)
             }
             .padding(.horizontal, 24)
-
-            Spacer()
-        }
-    }
-
-    private var extractingView: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            ProgressView()
-                .scaleEffect(1.5)
-            Text("Extracting nutrition info...")
-                .font(.headline)
-                .foregroundStyle(.secondary)
             Spacer()
         }
     }
@@ -125,20 +116,15 @@ struct NutritionLabelScanView: View {
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 16) {
             Spacer()
-
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 50))
                 .foregroundStyle(.orange)
-
             Text("Extraction Failed")
                 .font(.title3)
                 .fontWeight(.semibold)
-
             Text(message)
-                .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-
             HStack(spacing: 16) {
                 Button("Try Again") {
                     capturedImage = nil
@@ -155,7 +141,6 @@ struct NutritionLabelScanView: View {
                     .buttonStyle(.borderedProminent)
                 }
             }
-
             Spacer()
         }
     }
@@ -169,15 +154,10 @@ struct NutritionLabelScanView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             HStack(spacing: 16) {
-                Button("Retake") {
-                    capturedImage = nil
-                }
-                .buttonStyle(.bordered)
-
-                Button("Extract") {
-                    Task { await extractNutritionFromImage() }
-                }
-                .buttonStyle(.borderedProminent)
+                Button("Retake") { capturedImage = nil }
+                    .buttonStyle(.bordered)
+                Button("Extract") { Task { await extractNutritionFromImage() } }
+                    .buttonStyle(.borderedProminent)
             }
         }
     }
@@ -190,25 +170,26 @@ struct NutritionLabelScanView: View {
 
     private func extractNutritionFromImage() async {
         guard let image = capturedImage else { return }
-
         isExtracting = true
         errorMessage = nil
 
-        guard let service = LLMServiceFactory.create(settings: settings) else {
-            errorMessage = "Please configure your API key in Settings."
-            isExtracting = false
-            return
-        }
-
+        // First do OCR
+        let ocr = OCRService()
         do {
-            let nutrition = try await service.extractNutritionLabel(from: image)
+            let text = try await ocr.extractText(from: image)
+            // Then extract nutrition from text
+            guard let service = LLMServiceFactory.create(settings: settings) else {
+                errorMessage = "Please configure your API key in Settings."
+                isExtracting = false
+                return
+            }
+            let nutrition = try await service.extractNutritionLabel(from: text)
             onExtracted(nutrition)
         } catch let error as LLMError {
             errorMessage = error.errorDescription
         } catch {
             errorMessage = "Failed to extract nutrition: \(error.localizedDescription)"
         }
-
         isExtracting = false
     }
 
@@ -230,51 +211,6 @@ struct NutritionLabelScanView: View {
         } catch {
             errorMessage = "Failed to extract nutrition: \(error.localizedDescription)"
         }
-
         isExtracting = false
-    }
-}
-
-struct NutritionTextInputView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var text: String
-    let onSubmit: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Text("Paste or type nutrition label text below")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                TextEditor(text: $text)
-                    .font(.body)
-                    .padding(8)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .frame(minHeight: 200)
-
-                Text("Example:\nCalories 150kcal\nProtein 5g\nCarbohydrates 20g\nFat 6g\nSugar 8g")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Enter Nutrition")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Extract") {
-                        onSubmit()
-                    }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
     }
 }

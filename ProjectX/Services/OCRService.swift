@@ -108,11 +108,10 @@ final class OCRService {
 
     /// Extract text from PDF data
     func extractText(from pdfData: Data) async throws -> String {
-        guard let document = PDFDocument(data: pdfData) else {
+        guard PDFDocument(data: pdfData) != nil else {
             throw OCRError.pdfLoadFailed
         }
 
-        // Save to temp file and use URL-based method
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
         try pdfData.write(to: tempURL)
         defer { try? FileManager.default.removeItem(at: tempURL) }

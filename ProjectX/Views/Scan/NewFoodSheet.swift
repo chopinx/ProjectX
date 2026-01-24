@@ -7,7 +7,6 @@ enum NutritionSource: String, CaseIterable, Identifiable {
     case manual = "Manual Entry"
 
     var id: String { rawValue }
-
     var icon: String {
         switch self {
         case .aiEstimate: return "sparkles"
@@ -15,7 +14,6 @@ enum NutritionSource: String, CaseIterable, Identifiable {
         case .manual: return "square.and.pencil"
         }
     }
-
     var description: String {
         switch self {
         case .aiEstimate: return "Let AI estimate nutrition based on food name"
@@ -39,7 +37,6 @@ struct NewFoodSheet: View {
     @State private var showNutritionEntry = false
     @State private var showLabelScanner = false
 
-    // Nutrition values
     @State private var calories = ""
     @State private var protein = ""
     @State private var carbohydrates = ""
@@ -49,7 +46,6 @@ struct NewFoodSheet: View {
     @State private var fiber = ""
     @State private var sodium = ""
 
-    // AI estimation state
     @State private var isEstimating = false
     @State private var estimationError: String?
     @State private var settings = AppSettings()
@@ -69,7 +65,7 @@ struct NewFoodSheet: View {
                 CategoryPicker(selection: $category)
             }
 
-            Section {
+            Section("Nutrition Source") {
                 ForEach(NutritionSource.allCases) { source in
                     Button {
                         nutritionSource = source
@@ -80,8 +76,7 @@ struct NewFoodSheet: View {
                                 .frame(width: 24)
                                 .foregroundStyle(.blue)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(source.rawValue)
-                                    .font(.headline)
+                                Text(source.rawValue).font(.headline)
                                 Text(source.description)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -95,12 +90,19 @@ struct NewFoodSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-            } header: {
-                Text("Nutrition Source")
             }
 
             if showNutritionEntry || !calories.isEmpty {
-                nutritionSection
+                Section("Nutrition per 100g") {
+                    NutritionFieldRow(label: "Calories", value: $calories, unit: "kcal")
+                    NutritionFieldRow(label: "Protein", value: $protein, unit: "g")
+                    NutritionFieldRow(label: "Carbohydrates", value: $carbohydrates, unit: "g")
+                    NutritionFieldRow(label: "Fat", value: $fat, unit: "g")
+                    NutritionFieldRow(label: "Saturated Fat", value: $saturatedFat, unit: "g")
+                    NutritionFieldRow(label: "Sugar", value: $sugar, unit: "g")
+                    NutritionFieldRow(label: "Fiber", value: $fiber, unit: "g")
+                    NutritionFieldRow(label: "Sodium", value: $sodium, unit: "mg")
+                }
             }
 
             if isEstimating {
@@ -115,9 +117,7 @@ struct NewFoodSheet: View {
 
             if let error = estimationError {
                 Section {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                    Text(error).foregroundStyle(.red).font(.caption)
                 }
             }
         }
@@ -143,27 +143,11 @@ struct NewFoodSheet: View {
         }
     }
 
-    private var nutritionSection: some View {
-        Section("Nutrition per 100g") {
-            NutritionInputField(label: "Calories", value: $calories, unit: "kcal")
-            NutritionInputField(label: "Protein", value: $protein, unit: "g")
-            NutritionInputField(label: "Carbohydrates", value: $carbohydrates, unit: "g")
-            NutritionInputField(label: "Fat", value: $fat, unit: "g")
-            NutritionInputField(label: "Saturated Fat", value: $saturatedFat, unit: "g")
-            NutritionInputField(label: "Sugar", value: $sugar, unit: "g")
-            NutritionInputField(label: "Fiber", value: $fiber, unit: "g")
-            NutritionInputField(label: "Sodium", value: $sodium, unit: "mg")
-        }
-    }
-
     private func handleSourceSelection(_ source: NutritionSource) {
         switch source {
-        case .aiEstimate:
-            Task { await estimateNutrition() }
-        case .scanLabel:
-            showLabelScanner = true
-        case .manual:
-            showNutritionEntry = true
+        case .aiEstimate: Task { await estimateNutrition() }
+        case .scanLabel: showLabelScanner = true
+        case .manual: showNutritionEntry = true
         }
     }
 
@@ -188,7 +172,6 @@ struct NewFoodSheet: View {
         } catch {
             estimationError = "Failed to estimate nutrition: \(error.localizedDescription)"
         }
-
         isEstimating = false
     }
 
@@ -222,28 +205,7 @@ struct NewFoodSheet: View {
             try context.save()
             onSave(food)
         } catch {
-            // Handle error - the food won't be saved but we still dismiss
             dismiss()
-        }
-    }
-}
-
-private struct NutritionInputField: View {
-    let label: String
-    @Binding var value: String
-    let unit: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-            Spacer()
-            TextField("0", text: $value)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
-            Text(unit)
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
         }
     }
 }
