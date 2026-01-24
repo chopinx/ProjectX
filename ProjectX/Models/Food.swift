@@ -7,6 +7,7 @@ final class Food {
     var name: String
     var categoryRaw: String
     @Relationship(deleteRule: .cascade) var nutrition: NutritionInfo?
+    var isUserCreated: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -19,12 +20,14 @@ final class Food {
         id: UUID = UUID(),
         name: String,
         category: FoodCategory = .other,
-        nutrition: NutritionInfo? = nil
+        nutrition: NutritionInfo? = nil,
+        isUserCreated: Bool = true
     ) {
         self.id = id
         self.name = name
         self.categoryRaw = category.rawValue
         self.nutrition = nutrition
+        self.isUserCreated = isUserCreated
         self.createdAt = Date()
         self.updatedAt = Date()
     }
