@@ -206,12 +206,29 @@ Custom SwiftUI Layout for tag chips.
 
 ## LLM Integration
 
-### Supported Providers
+### Supported Providers & Models
 
-| Provider | Model | Features |
-|----------|-------|----------|
-| OpenAI | gpt-4o | Vision, text |
-| Claude | claude-sonnet-4-20250514 | Vision, text |
+**OpenAI Models:**
+| Model | ID | Vision Support |
+|-------|-----|----------------|
+| GPT-4o (Recommended) | gpt-4o | Yes |
+| GPT-4o Mini | gpt-4o-mini | Yes |
+| GPT-4 Turbo | gpt-4-turbo | Yes |
+| GPT-3.5 Turbo | gpt-3.5-turbo | No |
+
+**Claude Models:**
+| Model | ID | Vision Support |
+|-------|-----|----------------|
+| Claude Sonnet 4 (Recommended) | claude-sonnet-4-20250514 | Yes |
+| Claude Opus 4 | claude-opus-4-20250514 | Yes |
+| Claude 3.5 Haiku | claude-3-5-haiku-20241022 | Yes |
+| Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 | Yes |
+
+### Model Selection
+
+- Each provider has configurable model selection
+- Model preference persisted in UserDefaults
+- Warning shown when selected model doesn't support vision (image scanning)
 
 ### API Key Storage
 

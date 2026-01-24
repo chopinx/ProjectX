@@ -10,14 +10,10 @@ struct ScanView: View {
     @State private var showDocumentPicker = false
     @State private var showTextInput = false
     @State private var showScanTypeSelection = false
-
     @State private var receiptText = ""
     @State private var pendingOCRText: String?
-    @State private var selectedScanType: ScanType?
-
     @State private var showReviewFromText = false
     @State private var showNutritionFromText = false
-
     @State private var isProcessingOCR = false
     @State private var errorMessage: String?
 
@@ -26,12 +22,8 @@ struct ScanView: View {
         case nutritionLabel = "Nutrition Label"
 
         var id: String { rawValue }
-        var icon: String {
-            self == .receipt ? "doc.text.viewfinder" : "chart.bar.doc.horizontal"
-        }
-        var description: String {
-            self == .receipt ? "Extract grocery items and prices" : "Extract nutrition information"
-        }
+        var icon: String { self == .receipt ? "doc.text.viewfinder" : "chart.bar.doc.horizontal" }
+        var description: String { self == .receipt ? "Extract grocery items and prices" : "Extract nutrition information" }
     }
 
     var body: some View {
@@ -39,33 +31,19 @@ struct ScanView: View {
             ZStack {
                 VStack(spacing: 24) {
                     Spacer()
-                    if !settings.isConfigured {
-                        configurationRequiredView
-                    } else {
-                        scanOptionsView
-                    }
+                    if !settings.isConfigured { configurationRequiredView }
+                    else { scanOptionsView }
                     Spacer()
                 }
-
-                if isProcessingOCR {
-                    ocrProcessingOverlay
-                }
+                if isProcessingOCR { ocrProcessingOverlay }
             }
             .navigationTitle("Scan")
             .fullScreenCover(isPresented: $showCamera) {
-                CameraView(
-                    sourceType: .camera,
-                    onImageCaptured: handleImageCaptured,
-                    onCancel: { showCamera = false }
-                )
-                .ignoresSafeArea()
+                CameraView(sourceType: .camera, onImageCaptured: handleImageCaptured, onCancel: { showCamera = false })
+                    .ignoresSafeArea()
             }
             .sheet(isPresented: $showPhotoPicker) {
-                CameraView(
-                    sourceType: .photoLibrary,
-                    onImageCaptured: handleImageCaptured,
-                    onCancel: { showPhotoPicker = false }
-                )
+                CameraView(sourceType: .photoLibrary, onImageCaptured: handleImageCaptured, onCancel: { showPhotoPicker = false })
             }
             .sheet(isPresented: $showDocumentPicker) {
                 DocumentPicker(allowedTypes: [.pdf, .image]) { url in
@@ -90,90 +68,52 @@ struct ScanView: View {
             }
             .sheet(isPresented: $showScanTypeSelection) {
                 ScanTypeSelectionSheet(
-                    onSelect: handleScanTypeSelected,
-                    onCancel: {
+                    onSelect: { type in
                         showScanTypeSelection = false
-                        pendingOCRText = nil
-                    }
+                        if type == .receipt { showReviewFromText = true }
+                        else { showNutritionFromText = true }
+                    },
+                    onCancel: { showScanTypeSelection = false; pendingOCRText = nil }
                 )
                 .presentationDetents([.medium])
             }
             .navigationDestination(isPresented: $showReviewFromText) {
-                if let text = pendingOCRText {
-                    ReceiptReviewView(text: text, settings: settings)
-                }
+                if let text = pendingOCRText { ReceiptReviewView(text: text, settings: settings) }
             }
             .navigationDestination(isPresented: $showNutritionFromText) {
-                if let text = pendingOCRText {
-                    NutritionLabelResultView(text: text, settings: settings)
-                }
+                if let text = pendingOCRText { NutritionLabelResultView(text: text, settings: settings) }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
-            }
+            } message: { Text(errorMessage ?? "") }
         }
     }
 
     private var configurationRequiredView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "key.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.orange)
-            Text("API Key Required")
-                .font(.title2)
-                .fontWeight(.semibold)
+            Image(systemName: "key.fill").font(.system(size: 60)).foregroundStyle(.orange)
+            Text("API Key Required").font(.title2).fontWeight(.semibold)
             Text("Please configure your API key in Settings to enable scanning.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 32)
         }
     }
 
     private var scanOptionsView: some View {
         VStack(spacing: 24) {
-            Image(systemName: "camera.viewfinder")
-                .font(.system(size: 80))
-                .foregroundStyle(.blue)
-
+            Image(systemName: "camera.viewfinder").font(.system(size: 80)).foregroundStyle(.blue)
             VStack(spacing: 8) {
-                Text("Scan Receipt or Label")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Text("Take a photo, import a file, or enter text")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text("Scan Receipt or Label").font(.title2).fontWeight(.semibold)
+                Text("Take a photo, import a file, or enter text").font(.subheadline).foregroundStyle(.secondary)
             }
-
             VStack(spacing: 12) {
-                Button { showCamera = true } label: {
-                    Label("Take Photo", systemImage: "camera.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button { showPhotoPicker = true } label: {
-                    Label("Choose from Library", systemImage: "photo.on.rectangle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                Button { showDocumentPicker = true } label: {
-                    Label("Import PDF or Image", systemImage: "doc.badge.plus")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    receiptText = ""
-                    showTextInput = true
-                } label: {
-                    Label("Enter Text", systemImage: "text.alignleft")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                Button { showCamera = true } label: { Label("Take Photo", systemImage: "camera.fill").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent)
+                Button { showPhotoPicker = true } label: { Label("Choose from Library", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity) }
+                    .buttonStyle(.bordered)
+                Button { showDocumentPicker = true } label: { Label("Import PDF or Image", systemImage: "doc.badge.plus").frame(maxWidth: .infinity) }
+                    .buttonStyle(.bordered)
+                Button { receiptText = ""; showTextInput = true } label: { Label("Enter Text", systemImage: "text.alignleft").frame(maxWidth: .infinity) }
+                    .buttonStyle(.bordered)
             }
             .padding(.horizontal, 48)
         }
@@ -183,16 +123,10 @@ struct ScanView: View {
         ZStack {
             Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: 16) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
-                Text("Extracting text...")
-                    .font(.headline)
-                    .foregroundStyle(.white)
+                ProgressView().scaleEffect(1.5).tint(.white)
+                Text("Extracting text...").font(.headline).foregroundStyle(.white)
             }
-            .padding(32)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(32).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
 
@@ -205,16 +139,10 @@ struct ScanView: View {
     private func handleDocumentPicked(_ url: URL) {
         let ext = url.pathExtension.lowercased()
         if ext == "pdf" {
-            guard let data = try? Data(contentsOf: url) else {
-                errorMessage = "Failed to read PDF file"
-                return
-            }
+            guard let data = try? Data(contentsOf: url) else { errorMessage = "Failed to read PDF file"; return }
             Task { await performOCR(from: .pdf(data)) }
         } else if ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) {
-            guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
-                errorMessage = "Failed to read image file"
-                return
-            }
+            guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else { errorMessage = "Failed to read image file"; return }
             Task { await performOCR(from: .image(image)) }
         } else {
             errorMessage = "Unsupported file type"
@@ -224,22 +152,11 @@ struct ScanView: View {
     private func performOCR(from source: ImportManager.ImportSource) async {
         isProcessingOCR = true
         defer { isProcessingOCR = false }
-
         do {
-            let text = try await ImportManager().processImport(source)
-            pendingOCRText = text
+            pendingOCRText = try await ImportManager().processImport(source)
             showScanTypeSelection = true
         } catch {
             errorMessage = "Failed to extract text: \(error.localizedDescription)"
-        }
-    }
-
-    private func handleScanTypeSelected(_ type: ScanType) {
-        showScanTypeSelection = false
-        selectedScanType = type
-        switch type {
-        case .receipt: showReviewFromText = true
-        case .nutritionLabel: showNutritionFromText = true
         }
     }
 }
@@ -253,26 +170,18 @@ struct ScanTypeSelectionSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                Text("What would you like to extract?")
-                    .font(.headline)
-                    .padding(.top)
-
+                Text("What would you like to extract?").font(.headline).padding(.top)
                 VStack(spacing: 16) {
                     ForEach(ScanView.ScanType.allCases) { type in
                         Button { onSelect(type) } label: {
                             HStack(spacing: 16) {
-                                Image(systemName: type.icon)
-                                    .font(.title2)
-                                    .frame(width: 40)
+                                Image(systemName: type.icon).font(.title2).frame(width: 40)
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(type.rawValue).font(.headline)
-                                    Text(type.description)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    Text(type.description).font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
                             }
                             .padding()
                             .background(Color(.secondarySystemBackground))
@@ -287,118 +196,8 @@ struct ScanTypeSelectionSheet: View {
             .navigationTitle("Select Type")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onCancel) }
             }
-        }
-    }
-}
-
-// MARK: - Nutrition Label Result View
-
-struct NutritionLabelResultView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var context
-
-    let text: String
-    let settings: AppSettings
-
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var extractedNutrition: ExtractedNutrition?
-    @State private var foodName = ""
-    @State private var category = FoodCategory(main: .other)
-    @State private var showingSaveSuccess = false
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView()
-                    .scaleEffect(1.5)
-            } else if let error = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 50))
-                        .foregroundStyle(.orange)
-                    Text("Extraction Failed").font(.title3).fontWeight(.semibold)
-                    Text(error).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    Button("Try Again") { Task { await extractNutrition() } }
-                        .buttonStyle(.borderedProminent)
-                }
-                .padding()
-            } else if let nutrition = extractedNutrition {
-                Form {
-                    Section("Food Details") {
-                        TextField("Food Name", text: $foodName)
-                        CategoryPicker(selection: $category)
-                    }
-                    Section("Extracted Nutrition (per 100g)") {
-                        LabeledContent("Calories", value: "\(Int(nutrition.calories)) kcal")
-                        LabeledContent("Protein", value: String(format: "%.1fg", nutrition.protein))
-                        LabeledContent("Carbohydrates", value: String(format: "%.1fg", nutrition.carbohydrates))
-                        LabeledContent("Fat", value: String(format: "%.1fg", nutrition.fat))
-                        LabeledContent("Saturated Fat", value: String(format: "%.1fg", nutrition.saturatedFat))
-                        LabeledContent("Sugar", value: String(format: "%.1fg", nutrition.sugar))
-                        LabeledContent("Fiber", value: String(format: "%.1fg", nutrition.fiber))
-                        LabeledContent("Sodium", value: String(format: "%.0fmg", nutrition.sodium))
-                    }
-                    Section {
-                        Button("Save to Food Bank") { saveFood(nutrition) }
-                            .disabled(foodName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Nutrition Label")
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await extractNutrition() }
-        .alert("Saved!", isPresented: $showingSaveSuccess) {
-            Button("OK") { dismiss() }
-        } message: {
-            Text("Food has been added to your Food Bank")
-        }
-    }
-
-    private func extractNutrition() async {
-        isLoading = true
-        errorMessage = nil
-
-        guard let service = LLMServiceFactory.create(settings: settings) else {
-            errorMessage = "Please configure your API key in Settings."
-            isLoading = false
-            return
-        }
-
-        do {
-            extractedNutrition = try await service.extractNutritionLabel(from: text)
-        } catch let error as LLMError {
-            errorMessage = error.errorDescription
-        } catch {
-            errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
-        }
-        isLoading = false
-    }
-
-    private func saveFood(_ nutrition: ExtractedNutrition) {
-        let nutritionInfo = NutritionInfo(
-            calories: nutrition.calories,
-            protein: nutrition.protein,
-            carbohydrates: nutrition.carbohydrates,
-            fat: nutrition.fat,
-            saturatedFat: nutrition.saturatedFat,
-            sugar: nutrition.sugar,
-            fiber: nutrition.fiber,
-            sodium: nutrition.sodium
-        )
-        let food = Food(name: foodName, category: category, nutrition: nutritionInfo)
-        context.insert(food)
-
-        do {
-            try context.save()
-            showingSaveSuccess = true
-        } catch {
-            errorMessage = "Failed to save: \(error.localizedDescription)"
         }
     }
 }

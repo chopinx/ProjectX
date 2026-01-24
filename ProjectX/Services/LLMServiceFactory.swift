@@ -6,9 +6,9 @@ enum LLMServiceFactory {
 
         switch settings.selectedProvider {
         case .openai:
-            return OpenAIService(apiKey: settings.openaiAPIKey)
+            return OpenAIService(apiKey: settings.openaiAPIKey, model: settings.selectedOpenAIModel)
         case .claude:
-            return ClaudeService(apiKey: settings.claudeAPIKey)
+            return ClaudeService(apiKey: settings.claudeAPIKey, model: settings.selectedClaudeModel)
         }
     }
 }

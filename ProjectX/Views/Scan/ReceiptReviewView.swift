@@ -6,40 +6,116 @@ enum ReceiptSource {
     case text(String)
 }
 
+// MARK: - View Model
+
+@Observable
+final class ReceiptReviewViewModel {
+    var isLoading = true
+    var errorMessage: String?
+    var extractedItems: [ExtractedReceiptItem] = []
+    var foodLinks: [UUID: Food] = [:]
+    var storeName = ""
+    var tripDate = Date()
+    var hasExtracted = false
+
+    let source: ReceiptSource
+    let settings: AppSettings
+
+    init(source: ReceiptSource, settings: AppSettings) {
+        self.source = source
+        self.settings = settings
+    }
+
+    @MainActor
+    func extractItemsIfNeeded() async {
+        // Only extract once - don't re-extract when returning from background
+        guard !hasExtracted else { return }
+
+        isLoading = true
+        errorMessage = nil
+
+        guard let service = LLMServiceFactory.create(settings: settings) else {
+            errorMessage = "Please configure your API key in Settings."
+            isLoading = false
+            return
+        }
+
+        do {
+            switch source {
+            case .image(let image):
+                extractedItems = try await service.extractReceiptItems(from: image)
+            case .text(let text):
+                extractedItems = try await service.extractReceiptItems(from: text)
+            }
+            hasExtracted = true
+            isLoading = false
+        } catch let error as LLMError {
+            errorMessage = error.errorDescription
+            isLoading = false
+        } catch {
+            errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
+            isLoading = false
+        }
+    }
+
+    @MainActor
+    func retryExtraction() async {
+        hasExtracted = false
+        await extractItemsIfNeeded()
+    }
+
+    func deleteItems(at offsets: IndexSet) {
+        for index in offsets {
+            let item = extractedItems[index]
+            foodLinks.removeValue(forKey: item.id)
+        }
+        extractedItems.remove(atOffsets: offsets)
+    }
+
+    func updateItem(_ item: ExtractedReceiptItem, with updatedItem: ExtractedReceiptItem) {
+        if let index = extractedItems.firstIndex(where: { $0.id == item.id }) {
+            extractedItems[index] = updatedItem
+        }
+    }
+
+    func linkFood(_ food: Food?, to item: ExtractedReceiptItem) {
+        if let food {
+            foodLinks[item.id] = food
+        } else {
+            foodLinks.removeValue(forKey: item.id)
+        }
+    }
+
+    var totalPrice: Double {
+        extractedItems.reduce(0) { $0 + $1.price }
+    }
+}
+
+// MARK: - View
+
 struct ReceiptReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Query(sort: \Food.name) private var foods: [Food]
 
-    private let source: ReceiptSource
-
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var extractedItems: [ExtractedReceiptItem] = []
-    @State private var foodLinks: [UUID: Food] = [:]
+    @State private var viewModel: ReceiptReviewViewModel
     @State private var editingItem: ExtractedReceiptItem?
     @State private var matchingItem: ExtractedReceiptItem?
-    @State private var storeName = ""
-    @State private var tripDate = Date()
     @State private var showingSaveError = false
 
-    private let settings: AppSettings
-
     init(image: UIImage, settings: AppSettings) {
-        self.source = .image(image)
-        self.settings = settings
+        _viewModel = State(initialValue: ReceiptReviewViewModel(source: .image(image), settings: settings))
     }
 
     init(text: String, settings: AppSettings) {
-        self.source = .text(text)
-        self.settings = settings
+        _viewModel = State(initialValue: ReceiptReviewViewModel(source: .text(text), settings: settings))
     }
 
     var body: some View {
         Group {
-            if isLoading {
+            if viewModel.isLoading {
                 loadingView
-            } else if let error = errorMessage {
+            } else if let error = viewModel.errorMessage {
                 errorView(error)
             } else {
                 reviewForm
@@ -53,18 +129,19 @@ struct ReceiptReviewView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save Trip", action: saveTrip)
-                    .disabled(isLoading || extractedItems.isEmpty)
+                    .disabled(viewModel.isLoading || viewModel.extractedItems.isEmpty)
             }
         }
-        .task {
-            await extractItems()
+        .task(id: "extract") {
+            // Small delay to ensure view is fully loaded after navigation
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            await viewModel.extractItemsIfNeeded()
         }
         .sheet(item: $editingItem) { item in
             NavigationStack {
                 ReceiptItemEditSheet(item: item) { updatedItem in
-                    if let index = extractedItems.firstIndex(where: { $0.id == item.id }) {
-                        extractedItems[index] = updatedItem
-                    }
+                    viewModel.updateItem(item, with: updatedItem)
                     editingItem = nil
                 }
             }
@@ -74,13 +151,9 @@ struct ReceiptReviewView: View {
                 FoodMatchingSheet(
                     item: item,
                     foods: foods,
-                    currentMatch: foodLinks[item.id]
+                    currentMatch: viewModel.foodLinks[item.id]
                 ) { food in
-                    if let food {
-                        foodLinks[item.id] = food
-                    } else {
-                        foodLinks.removeValue(forKey: item.id)
-                    }
+                    viewModel.linkFood(food, to: item)
                     matchingItem = nil
                 }
             }
@@ -119,7 +192,7 @@ struct ReceiptReviewView: View {
                 .padding(.horizontal)
 
             Button("Try Again") {
-                Task { await extractItems() }
+                Task { await viewModel.retryExtraction() }
             }
             .buttonStyle(.borderedProminent)
         }
@@ -127,7 +200,7 @@ struct ReceiptReviewView: View {
 
     private var reviewForm: some View {
         Form {
-            if case .image(let image) = source {
+            if case .image(let image) = viewModel.source {
                 Section("Receipt Image") {
                     Image(uiImage: image)
                         .resizable()
@@ -138,42 +211,42 @@ struct ReceiptReviewView: View {
             }
 
             Section("Trip Info") {
-                DatePicker("Date", selection: $tripDate, displayedComponents: .date)
-                TextField("Store (optional)", text: $storeName)
+                DatePicker("Date", selection: $viewModel.tripDate, displayedComponents: .date)
+                TextField("Store (optional)", text: $viewModel.storeName)
             }
 
             Section {
-                if extractedItems.isEmpty {
+                if viewModel.extractedItems.isEmpty {
                     Text("No items found")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(extractedItems) { item in
+                    ForEach(viewModel.extractedItems) { item in
                         ReceiptItemRow(
                             item: item,
-                            linkedFood: foodLinks[item.id],
+                            linkedFood: viewModel.foodLinks[item.id],
                             onEdit: { editingItem = item },
                             onMatch: { matchingItem = item }
                         )
                     }
-                    .onDelete(perform: deleteItems)
+                    .onDelete(perform: viewModel.deleteItems)
                 }
             } header: {
                 HStack {
                     Text("Extracted Items")
                     Spacer()
-                    Text("\(extractedItems.count) items")
+                    Text("\(viewModel.extractedItems.count) items")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if !extractedItems.isEmpty {
+            if !viewModel.extractedItems.isEmpty {
                 Section {
                     HStack {
                         Text("Total")
                             .fontWeight(.semibold)
                         Spacer()
-                        Text(String(format: "%.2f", totalPrice))
+                        Text(String(format: "%.2f", viewModel.totalPrice))
                             .fontWeight(.semibold)
                     }
                 }
@@ -181,58 +254,19 @@ struct ReceiptReviewView: View {
         }
     }
 
-    private var totalPrice: Double {
-        extractedItems.reduce(0) { $0 + $1.price }
-    }
-
-    private func extractItems() async {
-        isLoading = true
-        errorMessage = nil
-
-        guard let service = LLMServiceFactory.create(settings: settings) else {
-            errorMessage = "Please configure your API key in Settings."
-            isLoading = false
-            return
-        }
-
-        do {
-            switch source {
-            case .image(let image):
-                extractedItems = try await service.extractReceiptItems(from: image)
-            case .text(let text):
-                extractedItems = try await service.extractReceiptItems(from: text)
-            }
-            isLoading = false
-        } catch let error as LLMError {
-            errorMessage = error.errorDescription
-            isLoading = false
-        } catch {
-            errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
-            isLoading = false
-        }
-    }
-
-    private func deleteItems(at offsets: IndexSet) {
-        for index in offsets {
-            let item = extractedItems[index]
-            foodLinks.removeValue(forKey: item.id)
-        }
-        extractedItems.remove(atOffsets: offsets)
-    }
-
     private func saveTrip() {
         let trip = GroceryTrip(
-            date: tripDate,
-            storeName: storeName.isEmpty ? nil : storeName
+            date: viewModel.tripDate,
+            storeName: viewModel.storeName.isEmpty ? nil : viewModel.storeName
         )
         context.insert(trip)
 
-        for extractedItem in extractedItems {
+        for extractedItem in viewModel.extractedItems {
             let purchasedItem = PurchasedItem(
                 name: extractedItem.name,
                 quantity: extractedItem.quantityGrams,
                 price: extractedItem.price,
-                food: foodLinks[extractedItem.id]
+                food: viewModel.foodLinks[extractedItem.id]
             )
             purchasedItem.trip = trip
             trip.items.append(purchasedItem)

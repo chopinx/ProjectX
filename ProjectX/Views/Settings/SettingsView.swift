@@ -46,6 +46,30 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    switch settings.selectedProvider {
+                    case .openai:
+                        Picker("Model", selection: $settings.selectedOpenAIModel) {
+                            ForEach(OpenAIModel.allCases) { model in
+                                Text(model.displayName).tag(model)
+                            }
+                        }
+                    case .claude:
+                        Picker("Model", selection: $settings.selectedClaudeModel) {
+                            ForEach(ClaudeModel.allCases) { model in
+                                Text(model.displayName).tag(model)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Model")
+                } footer: {
+                    if !settings.currentModel.supportsVision {
+                        Label("This model does not support image scanning", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Section {
                     SecureField("API Key", text: $apiKeyInput)
                         .textContentType(.password)
                         .onChange(of: apiKeyInput) { validationResult = nil }
@@ -174,8 +198,8 @@ struct SettingsView: View {
 
         let service: LLMService
         switch settings.selectedProvider {
-        case .openai: service = OpenAIService(apiKey: apiKeyInput)
-        case .claude: service = ClaudeService(apiKey: apiKeyInput)
+        case .openai: service = OpenAIService(apiKey: apiKeyInput, model: settings.selectedOpenAIModel)
+        case .claude: service = ClaudeService(apiKey: apiKeyInput, model: settings.selectedClaudeModel)
         }
 
         do {
