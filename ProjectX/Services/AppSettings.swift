@@ -124,6 +124,7 @@ final class AppSettings {
     private let nutritionTargetKey = "nutrition_target"
     private let familyMembersKey = "family_members"
     private let familyGuideCompletedKey = "family_guide_completed"
+    private let filterBabyFoodKey = "filter_baby_food"
 
     var selectedProvider: LLMProvider {
         didSet {

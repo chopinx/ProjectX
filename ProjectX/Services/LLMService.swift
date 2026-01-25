@@ -5,11 +5,24 @@ import UIKit
 
 struct ExtractedReceipt: Codable {
     var storeName: String?
+    var receiptDate: String?  // Date string from receipt (e.g., "2025-01-25" or "Jan 25, 2025")
     var items: [ExtractedReceiptItem]
 
     enum CodingKeys: String, CodingKey {
         case storeName = "store_name"
+        case receiptDate = "receipt_date"
         case items
+    }
+
+    /// Parse receiptDate string to Date
+    var parsedDate: Date? {
+        guard let dateStr = receiptDate else { return nil }
+        let formatters: [DateFormatter] = {
+            let formats = ["yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "MMM d, yyyy", "d MMM yyyy", "yyyy/MM/dd"]
+            return formats.map { f in let df = DateFormatter(); df.dateFormat = f; return df }
+        }()
+        for formatter in formatters { if let d = formatter.date(from: dateStr) { return d } }
+        return nil
     }
 }
 

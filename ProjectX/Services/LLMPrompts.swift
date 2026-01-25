@@ -34,15 +34,16 @@ enum LLMPrompts {
         """
 
     static let receiptImagePrompt = """
-        Extract store name and ONLY food items from this grocery receipt image.
+        Extract store name, date, and ONLY food items from this grocery receipt image.
 
         \(foodOnlyRule)
 
         Required JSON structure:
-        {"store_name":"Store Name","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
+        {"store_name":"Store Name","receipt_date":"2025-01-25","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
 
         Field rules:
         - store_name: string or null if not visible
+        - receipt_date: date in YYYY-MM-DD format, or null if not visible
         - name: translate to English if needed
         - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
         - price: number without currency symbol
@@ -52,7 +53,7 @@ enum LLMPrompts {
 
     static func receiptTextPrompt(_ text: String) -> String {
         """
-        Extract store name and ONLY food items from this receipt text.
+        Extract store name, date, and ONLY food items from this receipt text.
 
         \(foodOnlyRule)
 
@@ -60,10 +61,11 @@ enum LLMPrompts {
         \(text)
 
         Required JSON structure:
-        {"store_name":"Store Name","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
+        {"store_name":"Store Name","receipt_date":"2025-01-25","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
 
         Field rules:
         - store_name: string or null if not found
+        - receipt_date: date in YYYY-MM-DD format, or null if not found
         - name: translate to English if needed
         - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
         - price: number without currency symbol
