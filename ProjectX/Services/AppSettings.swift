@@ -178,6 +178,12 @@ final class AppSettings {
         }
     }
 
+    var filterBabyFood: Bool {
+        didSet {
+            UserDefaults.standard.set(filterBabyFood, forKey: filterBabyFoodKey)
+        }
+    }
+
     var currentAPIKey: String {
         switch selectedProvider {
         case .openai: return openaiAPIKey
@@ -223,5 +229,6 @@ final class AppSettings {
         }
 
         self.hasCompletedFamilyGuide = UserDefaults.standard.bool(forKey: familyGuideCompletedKey)
+        self.filterBabyFood = UserDefaults.standard.bool(forKey: filterBabyFoodKey)
     }
 }

@@ -242,7 +242,7 @@ Features:
 **Files:**
 - Create: `ProjectX/Views/Scan/ScanView.swift`
 - Create: `ProjectX/Views/Scan/ReceiptReviewView.swift`
-- Create: `ProjectX/Views/Scan/NewFoodSheet.swift`
+- Reuse: `ProjectX/Views/FoodBank/FoodDetailView.swift` for new food creation
 
 Features:
 - Camera capture and photo library

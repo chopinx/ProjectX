@@ -8,7 +8,9 @@ struct HomeView: View {
 
     @State private var showingNewTrip = false
     @State private var showingAddOptions = false
-    @State private var tripToDelete: GroceryTrip?
+    @State private var showDeleteAlert = false
+    @State private var pendingDeleteTrip: GroceryTrip?
+    @State private var pendingDeleteMessage = ""
 
     var body: some View {
         NavigationStack {
@@ -28,7 +30,14 @@ struct HomeView: View {
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                tripToDelete = trip
+                                // Cache everything needed for the alert
+                                let message = "This will permanently delete \"\(tripTitle(for: trip))\" and all its items."
+                                // Delay to let swipe animation fully complete
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    pendingDeleteTrip = trip
+                                    pendingDeleteMessage = message
+                                    showDeleteAlert = true
+                                }
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -54,11 +63,21 @@ struct HomeView: View {
             .sheet(isPresented: $showingNewTrip) {
                 NavigationStack { TripDetailView(trip: nil) }
             }
-            .deleteConfirmation("Delete Trip?", item: $tripToDelete, message: { trip in
-                "This will permanently delete \"\(tripTitle(for: trip))\" and all its items."
-            }) { trip in
-                withAnimation { context.delete(trip) }
-                try? context.save()
+            .alert("Delete Trip?", isPresented: $showDeleteAlert) {
+                Button("Cancel", role: .cancel) {
+                    pendingDeleteTrip = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let trip = pendingDeleteTrip {
+                        pendingDeleteTrip = nil
+                        withAnimation {
+                            context.delete(trip)
+                            try? context.save()
+                        }
+                    }
+                }
+            } message: {
+                Text(pendingDeleteMessage)
             }
         }
     }

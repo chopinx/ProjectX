@@ -98,7 +98,7 @@ struct FoodMatchingSheet: View {
         }
         .sheet(isPresented: $showingNewFood) {
             NavigationStack {
-                NewFoodSheet(suggestedName: item.name, suggestedCategory: item.category) { newFood in
+                FoodDetailView(suggestedName: item.name, suggestedCategory: item.category) { newFood in
                     selectedFood = newFood
                     showingNewFood = false
                 }

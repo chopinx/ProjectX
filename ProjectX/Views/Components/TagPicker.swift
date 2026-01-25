@@ -7,9 +7,6 @@ struct TagPicker: View {
     @Query(sort: \Tag.name) private var allTags: [Tag]
 
     @State private var showingCreateTag = false
-    @State private var newTagName = ""
-    @State private var newTagColorHex = "007AFF"
-    @State private var duplicateError = false
 
     var body: some View {
         Section {
@@ -32,9 +29,7 @@ struct TagPicker: View {
             HStack {
                 Text("Tags")
                 Spacer()
-                Button {
-                    showingCreateTag = true
-                } label: {
+                Button { showingCreateTag = true } label: {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(Color.themePrimary)
                 }
@@ -42,20 +37,15 @@ struct TagPicker: View {
         }
         .sheet(isPresented: $showingCreateTag) {
             NavigationStack {
-                CreateTagSheet(
-                    name: $newTagName,
-                    colorHex: $newTagColorHex,
-                    existingNames: Set(allTags.map { $0.name.lowercased() }),
-                    onSave: createTag,
-                    onCancel: { showingCreateTag = false }
-                )
+                TagEditSheet(tag: nil, existingNames: Set(allTags.map { $0.name.lowercased() })) { name, colorHex in
+                    let tag = Tag(name: name, colorHex: colorHex)
+                    context.insert(tag)
+                    try? context.save()
+                    selectedTags.append(tag)
+                    showingCreateTag = false
+                }
             }
             .presentationDetents([.medium])
-        }
-        .alert("Duplicate Tag", isPresented: $duplicateError) {
-            Button("OK") {}
-        } message: {
-            Text("A tag with this name already exists.")
         }
     }
 
@@ -66,154 +56,15 @@ struct TagPicker: View {
             selectedTags.append(tag)
         }
     }
-
-    private func createTag() {
-        let trimmedName = newTagName.trimmingCharacters(in: .whitespaces)
-        guard !trimmedName.isEmpty else { return }
-
-        // Check for duplicate name
-        if allTags.contains(where: { $0.name.lowercased() == trimmedName.lowercased() }) {
-            duplicateError = true
-            return
-        }
-
-        let tag = Tag(name: trimmedName, colorHex: newTagColorHex)
-        context.insert(tag)
-        try? context.save()
-
-        selectedTags.append(tag)
-        newTagName = ""
-        newTagColorHex = "007AFF"
-        showingCreateTag = false
-    }
 }
 
-private struct TagChip: View {
-    let tag: Tag
-    let isSelected: Bool
-    let onTap: () -> Void
+// MARK: - Flow Layout
 
-    var body: some View {
-        Button(action: onTap) {
-            Text(tag.name)
-                .font(.subheadline)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? tag.color.opacity(0.2) : Color(.systemGray6))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(isSelected ? tag.color : Color.clear, lineWidth: 2)
-                )
-                .foregroundStyle(isSelected ? tag.color : .primary)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct CreateTagSheet: View {
-    @Binding var name: String
-    @Binding var colorHex: String
-    let existingNames: Set<String>
-    let onSave: () -> Void
-    let onCancel: () -> Void
-
-    private var isDuplicate: Bool {
-        existingNames.contains(name.trimmingCharacters(in: .whitespaces).lowercased())
-    }
-
-    var body: some View {
-        Form {
-            Section("Tag Name") {
-                TextField("e.g., Red Meat, Organic, Local", text: $name)
-                if isDuplicate {
-                    Text("A tag with this name already exists")
-                        .font(.caption)
-                        .foregroundStyle(Color.themeError)
-                }
-            }
-
-            Section("Color") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                    ForEach(Tag.presetColors, id: \.hex) { preset in
-                        ColorButton(
-                            hex: preset.hex,
-                            isSelected: colorHex == preset.hex,
-                            onTap: { colorHex = preset.hex }
-                        )
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-
-            Section {
-                HStack {
-                    Text("Preview")
-                    Spacer()
-                    Text(name.isEmpty ? "Tag Name" : name)
-                        .font(.subheadline)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill((Color(hex: colorHex) ?? .blue).opacity(0.2))
-                        )
-                        .overlay(
-                            Capsule()
-                                .stroke(Color(hex: colorHex) ?? .blue, lineWidth: 2)
-                        )
-                        .foregroundStyle(Color(hex: colorHex) ?? .blue)
-                }
-            }
-        }
-        .navigationTitle("New Tag")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: onCancel)
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Add", action: onSave)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isDuplicate)
-            }
-        }
-    }
-}
-
-private struct ColorButton: View {
-    let hex: String
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            Circle()
-                .fill(Color(hex: hex) ?? .blue)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Circle()
-                        .stroke(Color.primary, lineWidth: isSelected ? 3 : 0)
-                        .padding(2)
-                )
-                .overlay(
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.white)
-                        .opacity(isSelected ? 1 : 0)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// Simple flow layout for tags
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = layout(proposal: proposal, subviews: subviews)
-        return result.size
+        layout(proposal: proposal, subviews: subviews).size
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -232,19 +83,16 @@ struct FlowLayout: Layout {
 
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-
             if currentX + size.width > maxWidth && currentX > 0 {
                 currentX = 0
                 currentY += lineHeight + spacing
                 lineHeight = 0
             }
-
             frames.append(CGRect(x: currentX, y: currentY, width: size.width, height: size.height))
             lineHeight = max(lineHeight, size.height)
             currentX += size.width + spacing
         }
 
-        let totalHeight = currentY + lineHeight
-        return (CGSize(width: maxWidth, height: totalHeight), frames)
+        return (CGSize(width: maxWidth, height: currentY + lineHeight), frames)
     }
 }

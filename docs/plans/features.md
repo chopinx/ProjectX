@@ -180,7 +180,7 @@ Shared text input sheet for receipt text and nutrition label text entry.
 
 ### NutritionFieldRow
 
-Nutrition input row component used in FoodDetailView and NewFoodSheet.
+Nutrition input row component used in FoodDetailView and NutritionFormSection.
 
 **File:** `ProjectX/Views/Components/NutritionFieldRow.swift`
 

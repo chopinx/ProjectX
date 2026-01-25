@@ -2,24 +2,31 @@ import SwiftUI
 import SwiftData
 
 enum ItemSortOption: String, CaseIterable, Identifiable {
-    case name = "Name"
-    case calories = "Calories"
-    case protein = "Protein"
-    case carbs = "Carbs"
-    case fat = "Fat"
-    case sugar = "Sugar"
-    case price = "Price"
+    case name = "Name", calories = "Calories", protein = "Protein"
+    case carbs = "Carbs", fat = "Fat", sugar = "Sugar", price = "Price"
 
     var id: String { rawValue }
     var icon: String {
         switch self {
-        case .name: return "textformat"
-        case .calories: return "flame"
-        case .protein: return "p.circle"
-        case .carbs: return "c.circle"
-        case .fat: return "f.circle"
-        case .sugar: return "s.circle"
-        case .price: return "dollarsign.circle"
+        case .name: "textformat"
+        case .calories: "flame"
+        case .protein: "p.circle"
+        case .carbs: "c.circle"
+        case .fat: "f.circle"
+        case .sugar: "s.circle"
+        case .price: "dollarsign.circle"
+        }
+    }
+
+    func value(for item: PurchasedItem) -> Double {
+        switch self {
+        case .name: 0 // handled separately
+        case .calories: item.calculatedNutrition?.calories ?? 0
+        case .protein: item.calculatedNutrition?.protein ?? 0
+        case .carbs: item.calculatedNutrition?.carbohydrates ?? 0
+        case .fat: item.calculatedNutrition?.fat ?? 0
+        case .sugar: item.calculatedNutrition?.sugar ?? 0
+        case .price: item.price
         }
     }
 }
@@ -44,24 +51,9 @@ struct TripDetailView: View {
     private var isNewTrip: Bool { existingTrip == nil }
 
     private var sortedItems: [PurchasedItem] {
-        let sorted = items.sorted { a, b in
-            switch sortOption {
-            case .name:
-                return a.name.localizedCompare(b.name) == .orderedAscending
-            case .calories:
-                return (a.calculatedNutrition?.calories ?? 0) < (b.calculatedNutrition?.calories ?? 0)
-            case .protein:
-                return (a.calculatedNutrition?.protein ?? 0) < (b.calculatedNutrition?.protein ?? 0)
-            case .carbs:
-                return (a.calculatedNutrition?.carbohydrates ?? 0) < (b.calculatedNutrition?.carbohydrates ?? 0)
-            case .fat:
-                return (a.calculatedNutrition?.fat ?? 0) < (b.calculatedNutrition?.fat ?? 0)
-            case .sugar:
-                return (a.calculatedNutrition?.sugar ?? 0) < (b.calculatedNutrition?.sugar ?? 0)
-            case .price:
-                return a.price < b.price
-            }
-        }
+        let sorted = sortOption == .name
+            ? items.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+            : items.sorted { sortOption.value(for: $0) < sortOption.value(for: $1) }
         return sortAscending ? sorted : sorted.reversed()
     }
 
@@ -95,7 +87,7 @@ struct TripDetailView: View {
                         Button { editingItem = item } label: { ItemRow(item: item) }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) { itemToDelete = item } label: {
+                                Button(role: .destructive) { DispatchQueue.main.async { itemToDelete = item } } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
@@ -249,30 +241,3 @@ private struct ItemRow: View {
     }
 }
 
-// MARK: - Nutrition Summary Row
-
-struct NutritionSummaryRow: View {
-    let nutrition: NutritionInfo
-    var isCompact: Bool = false
-
-    var body: some View {
-        HStack(spacing: isCompact ? 8 : 12) {
-            nutrientLabel("Cal", value: nutrition.calories, unit: "", color: .nutritionCalories)
-            nutrientLabel("P", value: nutrition.protein, unit: "g", color: .nutritionProtein)
-            nutrientLabel("C", value: nutrition.carbohydrates, unit: "g", color: .nutritionCarbs)
-            nutrientLabel("F", value: nutrition.fat, unit: "g", color: .nutritionFat)
-            nutrientLabel("S", value: nutrition.sugar, unit: "g", color: .nutritionSugar)
-        }
-        .font(isCompact ? .caption2 : .caption)
-    }
-
-    private func nutrientLabel(_ label: String, value: Double, unit: String, color: Color) -> some View {
-        HStack(spacing: 2) {
-            Text(label)
-                .fontWeight(.medium)
-                .foregroundStyle(color)
-            Text("\(Int(value))\(unit)")
-                .foregroundStyle(.secondary)
-        }
-    }
-}

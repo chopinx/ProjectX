@@ -36,14 +36,19 @@
 3. LLM service layer: OpenAI + Claude support with model selection (see [Features](features.md#llm-integration))
 4. Secure API key storage via Keychain with validation
 5. Receipt scanning with AI extraction (image or text input)
-6. Receipt review flow with food matching
+6. Receipt review flow with food matching and auto-matching
 7. Food Bank with AI nutrition estimation + label scanning
-8. Nutrition analysis (7-day + all-time)
+8. Nutrition analysis (7-day + all-time) with pie charts
 9. Two-level food category system (see [Features](features.md#food-category-system))
 10. Tag system for food labeling (see [Features](features.md#tag-system))
 11. Default data management with restore functionality
 12. Data export/import (see [Features](features.md#data-exportimport))
 13. Family Nutrition Guide with LLM-generated targets (see [Features](features.md#family-nutrition-guide))
+14. Receipt draft persistence (resume editing after app switch)
+15. Baby food filter setting
+16. Multi-select batch operations for receipt items and Food Bank
+17. Separate AI buttons for category/tags vs nutrition estimation
+18. Tag & Category management view (create, edit, delete tags; view category hierarchy)
 
 ---
 
@@ -75,6 +80,14 @@
 | Per-member profiles (age, weight, activity, diet) | Yes |
 | LLM-generated nutrition targets | Yes |
 | Redo guide / regenerate suggestions | Yes |
+| Multi-select delete receipt items | Yes |
+| Multi-select delete foods | Yes |
+| Batch AI category/tags for foods | Yes |
+| Batch AI nutrition estimation | Yes |
+| Receipt draft persistence | Yes |
+| Baby food filter setting | Yes |
+| Manage tags (create, edit, delete) | Yes |
+| View category hierarchy | Yes |
 
 ---
 

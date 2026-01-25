@@ -94,10 +94,10 @@ protocol LLMService {
     func validateAPIKey() async throws
 
     /// Extract items and store name from a receipt image
-    func extractReceipt(from image: UIImage) async throws -> ExtractedReceipt
+    func extractReceipt(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt
 
     /// Extract items and store name from receipt text (copy-pasted or typed)
-    func extractReceipt(from text: String) async throws -> ExtractedReceipt
+    func extractReceipt(from text: String, filterBabyFood: Bool) async throws -> ExtractedReceipt
 
     /// Extract nutrition info from a nutrition label image
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition

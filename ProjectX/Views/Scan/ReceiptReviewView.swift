@@ -38,7 +38,8 @@ final class ReceiptReviewViewModel {
         guard let svc = LLMServiceFactory.create(settings: settings) else { errorMessage = "Configure API key in Settings."; isLoading = false; return }
         do {
             let r: ExtractedReceipt
-            switch source { case .image(let img): r = try await svc.extractReceipt(from: img); case .text(let txt): r = try await svc.extractReceipt(from: txt) }
+            let filter = settings.filterBabyFood
+            switch source { case .image(let img): r = try await svc.extractReceipt(from: img, filterBabyFood: filter); case .text(let txt): r = try await svc.extractReceipt(from: txt, filterBabyFood: filter) }
             extractedItems = r.items
             if let n = r.storeName, !n.isEmpty { storeName = n }
             if let d = r.parsedDate { tripDate = d }
@@ -65,6 +66,7 @@ final class ReceiptReviewViewModel {
     func dismiss(_ id: UUID) { suggestedMatches.removeValue(forKey: id) }
     @MainActor func retry() async { hasExtracted = false; await extract() }
     func delete(at o: IndexSet) { o.forEach { foodLinks.removeValue(forKey: extractedItems[$0].id); suggestedMatches.removeValue(forKey: extractedItems[$0].id) }; extractedItems.remove(atOffsets: o) }
+    func delete(ids: Set<UUID>) { ids.forEach { foodLinks.removeValue(forKey: $0); suggestedMatches.removeValue(forKey: $0) }; extractedItems.removeAll { ids.contains($0.id) } }
     func update(_ item: ExtractedReceiptItem, _ updated: ExtractedReceiptItem) { if let i = extractedItems.firstIndex(where: { $0.id == item.id }) { extractedItems[i] = updated } }
     func link(_ food: Food?, _ item: ExtractedReceiptItem) { suggestedMatches.removeValue(forKey: item.id); if let f = food { foodLinks[item.id] = f } else { foodLinks.removeValue(forKey: item.id) } }
     var total: Double { extractedItems.reduce(0) { $0 + $1.price } }
@@ -98,6 +100,9 @@ struct ReceiptReviewView: View {
     @State private var deleting: IndexSet?
     @State private var saveError = false
     @State private var restored = false
+    @State private var isSelecting = false
+    @State private var selectedIds: Set<UUID> = []
+    @State private var showDeleteSelected = false
     private let onDismiss: (() -> Void)?
 
     init(viewModel: ReceiptReviewViewModel, onDismiss: @escaping () -> Void) { _vm = State(initialValue: viewModel); self.onDismiss = onDismiss }
@@ -127,6 +132,10 @@ struct ReceiptReviewView: View {
             Button("Cancel", role: .cancel) { deleting = nil }
             Button("Remove", role: .destructive) { if let o = deleting { deleting = nil; vm.delete(at: o) } }
         } message: { if let o = deleting, let i = o.first, i < vm.extractedItems.count { Text("Remove \"\(vm.extractedItems[i].name)\"?") } }
+        .alert("Remove \(selectedIds.count) Items?", isPresented: $showDeleteSelected) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) { deleteSelected() }
+        } message: { Text("This cannot be undone.") }
     }
 
     private var form: some View {
@@ -139,12 +148,53 @@ struct ReceiptReviewView: View {
             Section {
                 if vm.extractedItems.isEmpty { Text("No items found").foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.vertical) }
                 else { ForEach(vm.extractedItems) { item in
-                    ReceiptItemRow(item: item, linked: vm.foodLinks[item.id], suggested: vm.suggestedMatches[item.id],
-                                   onEdit: { editing = item }, onMatch: { matching = item }, onConfirm: { vm.confirm(item.id) }, onDismiss: { vm.dismiss(item.id) })
-                }.onDelete { deleting = $0 } }
-            } header: { HStack { Text("Items"); if vm.isMatching { ProgressView().scaleEffect(0.7) }; Spacer(); Text("\(vm.extractedItems.count)").font(.caption).foregroundStyle(.secondary) } }
+                    HStack(spacing: 12) {
+                        if isSelecting {
+                            Image(systemName: selectedIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedIds.contains(item.id) ? Color.themePrimary : .secondary)
+                                .font(.title3)
+                                .onTapGesture { toggleSelection(item.id) }
+                        }
+                        ReceiptItemRow(item: item, linked: vm.foodLinks[item.id], suggested: vm.suggestedMatches[item.id],
+                                       onEdit: { editing = item }, onMatch: { matching = item }, onConfirm: { vm.confirm(item.id) }, onDismiss: { vm.dismiss(item.id) })
+                    }
+                }.onDelete { if !isSelecting { deleting = $0 } } }
+            } header: { itemsHeader }
             if !vm.extractedItems.isEmpty { Section { HStack { Text("Total").bold(); Spacer(); Text(String(format: "%.2f", vm.total)).bold() } } }
         }
+    }
+
+    private var itemsHeader: some View {
+        HStack {
+            Text("Items")
+            if vm.isMatching { ProgressView().scaleEffect(0.7) }
+            Spacer()
+            if !vm.extractedItems.isEmpty {
+                if isSelecting {
+                    Button(selectedIds.count == vm.extractedItems.count ? "Deselect All" : "Select All") {
+                        if selectedIds.count == vm.extractedItems.count { selectedIds.removeAll() }
+                        else { selectedIds = Set(vm.extractedItems.map(\.id)) }
+                    }.font(.caption)
+                    Button("Delete") { showDeleteSelected = true }
+                        .font(.caption).foregroundStyle(.red).disabled(selectedIds.isEmpty)
+                    Button("Done") { isSelecting = false; selectedIds.removeAll() }.font(.caption)
+                } else {
+                    Text("\(vm.extractedItems.count)").font(.caption).foregroundStyle(.secondary)
+                    Button("Select") { isSelecting = true }.font(.caption)
+                }
+            }
+        }
+    }
+
+    private func toggleSelection(_ id: UUID) {
+        if selectedIds.contains(id) { selectedIds.remove(id) }
+        else { selectedIds.insert(id) }
+    }
+
+    private func deleteSelected() {
+        vm.delete(ids: selectedIds)
+        selectedIds.removeAll()
+        if vm.extractedItems.isEmpty { isSelecting = false }
     }
 
     private func save() {

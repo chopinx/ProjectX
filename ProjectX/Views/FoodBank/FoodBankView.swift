@@ -16,6 +16,12 @@ struct FoodBankView: View {
     @State private var showingAddOptions = false
     @State private var showingNutritionScan = false
     @State private var foodToDelete: Food?
+    @State private var isSelecting = false
+    @State private var selectedFoodIds: Set<UUID> = []
+    @State private var showDeleteSelected = false
+    @State private var isAIProcessing = false
+    @State private var aiProgressMessage = ""
+    @State private var aiError: String?
 
     private var selectedMainCategory: FoodMainCategory? {
         get { selectedCategoryRaw.flatMap { FoodMainCategory(rawValue: $0) } }
@@ -51,7 +57,16 @@ struct FoodBankView: View {
             .searchable(text: $searchText, prompt: "Search foods")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showingAddOptions = true } label: { Label("Add Food", systemImage: "plus") }
+                    if isSelecting {
+                        Button("Done") { isSelecting = false; selectedFoodIds.removeAll() }
+                    } else {
+                        Button { showingAddOptions = true } label: { Label("Add Food", systemImage: "plus") }
+                    }
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    if !isSelecting && !foods.isEmpty {
+                        Button { isSelecting = true } label: { Label("Select", systemImage: "checkmark.circle") }
+                    }
                 }
             }
             .confirmationDialog("Add Food", isPresented: $showingAddOptions, titleVisibility: .visible) {
@@ -72,6 +87,14 @@ struct FoodBankView: View {
             withAnimation { context.delete(food) }
             try? context.save()
         }
+        .alert("Delete \(selectedFoodIds.count) Foods?", isPresented: $showDeleteSelected) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { deleteSelectedFoods() }
+        } message: { Text("This cannot be undone.") }
+        .alert("AI Error", isPresented: .constant(aiError != nil)) {
+            Button("OK") { aiError = nil }
+        } message: { Text(aiError ?? "") }
+        .overlay { if isAIProcessing { AIProcessingOverlay(message: aiProgressMessage) } }
     }
 
     // MARK: - Side Bar
@@ -116,14 +139,42 @@ struct FoodBankView: View {
             if !allTags.isEmpty {
                 filterBar {
                     ForEach(allTags) { tag in
-                        TagChip(tag: tag, isSelected: selectedTag?.id == tag.id) {
+                        TagChip(tag: tag, isSelected: selectedTag?.id == tag.id, showColorDot: true, showDismiss: true) {
                             withAnimation { selectedTag = selectedTag?.id == tag.id ? nil : tag }
                         }
                     }
                 }
             }
             foodList
+            if isSelecting && !filteredFoods.isEmpty { batchActionBar }
         }
+    }
+
+    private var batchActionBar: some View {
+        HStack(spacing: 16) {
+            Button { toggleSelectAll() } label: {
+                Text(selectedFoodIds.count == filteredFoods.count ? "Deselect All" : "Select All").font(.subheadline)
+            }
+            Spacer()
+            Text("\(selectedFoodIds.count) selected").font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                Button { Task { await batchAISuggestCategory() } } label: {
+                    Label("AI Category & Tags", systemImage: "sparkles")
+                }.disabled(selectedFoodIds.isEmpty || !settings.isConfigured)
+                Button { Task { await batchAIEstimateNutrition() } } label: {
+                    Label("AI Estimate Nutrition", systemImage: "sparkles")
+                }.disabled(selectedFoodIds.isEmpty || !settings.isConfigured)
+                Divider()
+                Button(role: .destructive) { showDeleteSelected = true } label: {
+                    Label("Delete", systemImage: "trash")
+                }.disabled(selectedFoodIds.isEmpty)
+            } label: {
+                Label("Actions", systemImage: "ellipsis.circle").font(.headline)
+            }.disabled(selectedFoodIds.isEmpty)
+        }
+        .padding(.horizontal).padding(.vertical, 12)
+        .background(Color(.secondarySystemBackground))
     }
 
     private func filterBar<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -146,16 +197,112 @@ struct FoodBankView: View {
                     description: Text("Try adjusting your filters"))
             } else {
                 ForEach(filteredFoods) { food in
-                    NavigationLink { FoodDetailView(food: food) } label: { FoodRow(food: food) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) { foodToDelete = food } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
+                    foodRow(food)
                 }
             }
         }
         .listStyle(.plain)
+    }
+
+    // MARK: - Selection Actions
+
+    private func toggleSelection(_ id: UUID) {
+        if selectedFoodIds.contains(id) { selectedFoodIds.remove(id) }
+        else { selectedFoodIds.insert(id) }
+    }
+
+    private func toggleSelectAll() {
+        if selectedFoodIds.count == filteredFoods.count { selectedFoodIds.removeAll() }
+        else { selectedFoodIds = Set(filteredFoods.map(\.id)) }
+    }
+
+    @ViewBuilder
+    private func foodRow(_ food: Food) -> some View {
+        let row = HStack(spacing: 12) {
+            if isSelecting {
+                Image(systemName: selectedFoodIds.contains(food.id) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedFoodIds.contains(food.id) ? Color.themePrimary : .secondary)
+                    .font(.title3)
+                    .onTapGesture { toggleSelection(food.id) }
+            }
+            FoodRow(food: food)
+        }
+        if isSelecting {
+            row
+        } else {
+            NavigationLink { FoodDetailView(food: food) } label: { row }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) { DispatchQueue.main.async { foodToDelete = food } } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+        }
+    }
+
+    private func deleteSelectedFoods() {
+        let toDelete = foods.filter { selectedFoodIds.contains($0.id) }
+        for food in toDelete { context.delete(food) }
+        try? context.save()
+        selectedFoodIds.removeAll()
+        if foods.isEmpty { isSelecting = false }
+    }
+
+    private func batchAISuggestCategory() async {
+        let tagNames = allTags.map(\.name)
+        await runBatchAIOperation(progressLabel: "Suggesting") { service, food in
+            let suggestion = try await service.suggestCategoryAndTags(for: food.name, availableTags: tagNames)
+            if let main = FoodMainCategory(rawValue: suggestion.category) {
+                if let subRaw = suggestion.subcategory,
+                   let sub = main.subcategories.first(where: { $0.rawValue == subRaw }) {
+                    food.category = FoodCategory(main: main, sub: sub)
+                } else {
+                    food.category = FoodCategory(main: main, sub: nil)
+                }
+            }
+            food.tags = allTags.filter { suggestion.tags.contains($0.name) }
+        }
+    }
+
+    private func batchAIEstimateNutrition() async {
+        await runBatchAIOperation(progressLabel: "Estimating") { service, food in
+            let result = try await service.estimateNutrition(for: food.name, category: food.category.displayName)
+            food.nutrition = NutritionInfo(
+                calories: result.calories, protein: result.protein, carbohydrates: result.carbohydrates,
+                fat: result.fat, saturatedFat: result.saturatedFat, sugar: result.sugar,
+                fiber: result.fiber, sodium: result.sodium
+            )
+        }
+    }
+
+    private func runBatchAIOperation(progressLabel: String, operation: (LLMService, Food) async throws -> Void) async {
+        guard let service = LLMServiceFactory.create(settings: settings) else {
+            aiError = "Please configure your API key in Settings."
+            return
+        }
+        let selectedFoods = foods.filter { selectedFoodIds.contains($0.id) }
+        guard !selectedFoods.isEmpty else { return }
+
+        isAIProcessing = true
+        var failedCount = 0, successCount = 0
+
+        for (index, food) in selectedFoods.enumerated() {
+            aiProgressMessage = "\(progressLabel) \(index + 1)/\(selectedFoods.count)..."
+            do {
+                try await operation(service, food)
+                food.updatedAt = .now
+                successCount += 1
+            } catch {
+                failedCount += 1
+            }
+        }
+        try? context.save()
+        isAIProcessing = false
+        selectedFoodIds.removeAll()
+        isSelecting = false
+
+        if failedCount > 0 {
+            aiError = "Completed \(successCount) of \(selectedFoods.count). \(failedCount) failed."
+        }
     }
 }
 
@@ -190,47 +337,6 @@ private struct SideTabItem: View {
     }
 }
 
-private struct FilterChip: View {
-    let title: String, isSelected: Bool, color: Color
-    let onTap: () -> Void
-
-    init(_ title: String, isSelected: Bool, color: Color, onTap: @escaping () -> Void) {
-        self.title = title; self.isSelected = isSelected; self.color = color; self.onTap = onTap
-    }
-
-    var body: some View {
-        Button(action: onTap) {
-            Text(title).font(.subheadline).fontWeight(isSelected ? .semibold : .regular)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(isSelected ? color : Color(.tertiarySystemBackground))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .clipShape(Capsule()).contentShape(Capsule())
-        }
-        .buttonStyle(.pressFeedback)
-    }
-}
-
-private struct TagChip: View {
-    let tag: Tag, isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                Circle().fill(tag.color).frame(width: 10, height: 10)
-                Text(tag.name).font(.subheadline).fontWeight(isSelected ? .semibold : .regular)
-                if isSelected { Image(systemName: "xmark").font(.caption) }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(isSelected ? tag.color.opacity(0.2) : Color(.secondarySystemBackground))
-            .foregroundStyle(isSelected ? tag.color : .primary)
-            .clipShape(Capsule())
-            .overlay(isSelected ? Capsule().stroke(tag.color, lineWidth: 1) : nil)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.pressFeedback)
-    }
-}
 
 private struct FoodRow: View {
     let food: Food

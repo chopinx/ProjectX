@@ -33,10 +33,22 @@ enum LLMPrompts {
         - Non-food items (cleaning supplies, toiletries, etc.)
         """
 
-    static let receiptImagePrompt = """
+    private static let babyFoodFilter = """
+        - Baby food, infant formula, baby cereal, baby snacks
+        - Any items labeled for infants, babies, or toddlers
+        """
+
+    static func foodOnlyRule(filterBabyFood: Bool) -> String {
+        var rule = foodOnlyRule
+        if filterBabyFood { rule += "\n" + babyFoodFilter }
+        return rule
+    }
+
+    static func receiptImagePrompt(filterBabyFood: Bool) -> String {
+        """
         Extract store name, date, and ONLY food items from this grocery receipt image.
 
-        \(foodOnlyRule)
+        \(foodOnlyRule(filterBabyFood: filterBabyFood))
 
         Required JSON structure:
         {"store_name":"Store Name","receipt_date":"2025-01-25","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
@@ -50,12 +62,13 @@ enum LLMPrompts {
         - category: one of produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other
         \(strictOutputRules)
         """
+    }
 
-    static func receiptTextPrompt(_ text: String) -> String {
+    static func receiptTextPrompt(_ text: String, filterBabyFood: Bool) -> String {
         """
         Extract store name, date, and ONLY food items from this receipt text.
 
-        \(foodOnlyRule)
+        \(foodOnlyRule(filterBabyFood: filterBabyFood))
 
         Receipt text:
         \(text)
@@ -132,17 +145,23 @@ enum LLMPrompts {
     static func suggestCategoryAndTagsPrompt(foodName: String, availableTags: [String]) -> String {
         let tagList = availableTags.isEmpty ? "(none available)" : availableTags.joined(separator: ", ")
         return """
-        Suggest the best category and tags for: "\(foodName)"
+        Suggest the best category and subcategory for: "\(foodName)"
 
-        Available categories: vegetables, fruits, meat, seafood, dairy, grains, legumes, nutsSeeds, oils, snacks, beverages, other
-        Available subcategories by category:
+        IMPORTANT: Always provide a specific subcategory when possible. The subcategory is the most important classification.
+
+        Available categories and their subcategories:
         - vegetables: leafy, root, cruciferous, squash, allium, peppers, mushrooms
         - fruits: citrus, berries, tropical, stone, pome, melons
         - meat: beef, pork, poultry, lamb, game
         - seafood: fish, shellfish, crustacean
         - dairy: milk, cheese, yogurt, butter, eggs
         - grains: bread, pasta, rice, cereal, flour
+        - legumes: (no subcategories)
+        - nutsSeeds: (no subcategories)
+        - oils: (no subcategories)
+        - snacks: (no subcategories)
         - beverages: water, juice, soda, coffee, tea, alcohol
+        - other: (no subcategories)
 
         Available tags: \(tagList)
 
@@ -151,7 +170,7 @@ enum LLMPrompts {
 
         Field rules:
         - category: one of the available categories (required)
-        - subcategory: one from the category's subcategories, or null if none fits
+        - subcategory: MUST provide one from the category's subcategories list above. Only use null if the category has no subcategories listed.
         - tags: array of 0-3 most relevant tags from available tags list, empty array if none fit
         \(strictOutputRules)
         """
