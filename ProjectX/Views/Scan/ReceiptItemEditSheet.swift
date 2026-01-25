@@ -24,18 +24,8 @@ struct ReceiptItemEditSheet: View {
         Form {
             Section("Item Details") {
                 TextField("Name", text: $name)
-
-                HStack {
-                    TextField("Quantity", text: $quantityGrams)
-                        .keyboardType(.numberPad)
-                    Text("g")
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    TextField("Price", text: $price)
-                        .keyboardType(.decimalPad)
-                }
+                UnitTextField(placeholder: "Quantity", value: $quantityGrams, unit: "g", keyboard: .numberPad)
+                UnitTextField(placeholder: "Price", value: $price, unit: "")
             }
 
             Section("Category") {

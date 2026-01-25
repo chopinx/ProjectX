@@ -1,0 +1,71 @@
+import SwiftUI
+import UIKit
+
+/// Manages scan flow state to persist across app backgrounding
+@Observable
+final class ScanFlowManager {
+    // Navigation state
+    var showReviewFromText = false
+    var showNutritionFromText = false
+    var showScanTypeSelection = false
+
+    // Pending data - stored as base64 for images to survive app backgrounding
+    var pendingOCRText: String?
+    var pendingImageData: Data?
+
+    // Active view model to preserve edit state
+    var activeReceiptViewModel: ReceiptReviewViewModel?
+    var activeNutritionText: String?
+
+    func setPendingImage(_ image: UIImage) {
+        pendingImageData = image.jpegData(compressionQuality: 0.8)
+    }
+
+    func getPendingImage() -> UIImage? {
+        guard let data = pendingImageData else { return nil }
+        return UIImage(data: data)
+    }
+
+    func startReceiptReview(text: String, settings: AppSettings) {
+        pendingOCRText = text
+        activeReceiptViewModel = ReceiptReviewViewModel(source: .text(text), settings: settings)
+        showReviewFromText = true
+    }
+
+    func startReceiptReview(image: UIImage, settings: AppSettings) {
+        setPendingImage(image)
+        activeReceiptViewModel = ReceiptReviewViewModel(source: .image(image), settings: settings)
+        showReviewFromText = true
+    }
+
+    func startNutritionReview(text: String) {
+        activeNutritionText = text
+        showNutritionFromText = true
+    }
+
+    func clearReviewState() {
+        showReviewFromText = false
+        showNutritionFromText = false
+        pendingOCRText = nil
+        pendingImageData = nil
+        activeReceiptViewModel = nil
+        activeNutritionText = nil
+    }
+
+    func clearSelectionState() {
+        showScanTypeSelection = false
+    }
+}
+
+// MARK: - Environment Key
+
+private struct ScanFlowManagerKey: EnvironmentKey {
+    static let defaultValue = ScanFlowManager()
+}
+
+extension EnvironmentValues {
+    var scanFlowManager: ScanFlowManager {
+        get { self[ScanFlowManagerKey.self] }
+        set { self[ScanFlowManagerKey.self] = newValue }
+    }
+}

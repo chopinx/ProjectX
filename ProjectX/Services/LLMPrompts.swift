@@ -1,166 +1,146 @@
 import Foundation
 
 /// Shared prompts for LLM services
+/// All prompts enforce strict JSON-only output for reliable parsing
 enum LLMPrompts {
+
+    // MARK: - Strict Output Instructions (appended to all prompts)
+
+    private static let strictOutputRules = """
+
+        CRITICAL OUTPUT REQUIREMENTS:
+        - Output ONLY the JSON object/array, nothing else
+        - Do NOT wrap in markdown code blocks (no ```)
+        - Do NOT include any text before or after the JSON
+        - Do NOT include comments or explanations
+        - Do NOT say "Here is" or any introduction
+        - Ensure valid JSON syntax (proper quotes, commas, brackets)
+        - Use null for missing values, not "null" string
+        - Use numbers without quotes for numeric fields
+        - Start response with { or [ and end with } or ]
+        """
+
+    // MARK: - Receipt Prompts
+
+    private static let foodOnlyRule = """
+        ONLY extract actual food/grocery items. IGNORE and DO NOT include:
+        - Bags, shopping bags, carrier bags
+        - Taxes, VAT, service charges
+        - Discounts, coupons, promotions, savings
+        - Deposits, bottle deposits, container fees
+        - Subtotals, totals, change, payment info
+        - Loyalty points, rewards, membership
+        - Non-food items (cleaning supplies, toiletries, etc.)
+        """
+
     static let receiptImagePrompt = """
-        Analyze this grocery receipt image and extract all food items.
-        Translate any non-English text to English.
+        Extract store name and ONLY food items from this grocery receipt image.
 
-        Return a JSON array with this exact structure:
-        [
-          {
-            "name": "English food name",
-            "quantity_grams": 1000,
-            "price": 2.99,
-            "category": "produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other"
-          }
-        ]
+        \(foodOnlyRule)
 
-        Rules:
-        - Translate German/other languages to English
-        - Convert ALL quantities to grams:
-          - "1 kg" → 1000
-          - "500 ml" → 500 (treat 1ml ≈ 1g)
-          - "2 pcs" → estimate weight (e.g., "2 apples" → 360)
-          - "1.5 L" → 1500
-        - Price should be a number without currency symbol
-        - Only return the JSON array, no other text
+        Required JSON structure:
+        {"store_name":"Store Name","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
+
+        Field rules:
+        - store_name: string or null if not visible
+        - name: translate to English if needed
+        - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
+        - price: number without currency symbol
+        - category: one of produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other
+        \(strictOutputRules)
         """
 
     static func receiptTextPrompt(_ text: String) -> String {
         """
-        Parse this grocery receipt text and extract all food items.
-        Translate any non-English text to English.
+        Extract store name and ONLY food items from this receipt text.
+
+        \(foodOnlyRule)
 
         Receipt text:
         \(text)
 
-        Return a JSON array with this exact structure:
-        [
-          {
-            "name": "English food name",
-            "quantity_grams": 1000,
-            "price": 2.99,
-            "category": "produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other"
-          }
-        ]
+        Required JSON structure:
+        {"store_name":"Store Name","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
 
-        Rules:
-        - Translate German/other languages to English
-        - Convert ALL quantities to grams:
-          - "1 kg" → 1000
-          - "500 ml" → 500 (treat 1ml ≈ 1g)
-          - "2 pcs" → estimate weight (e.g., "2 apples" → 360)
-          - "1.5 L" → 1500
-        - If quantity is not specified, estimate a reasonable default
-        - Price should be a number without currency symbol
-        - Only return the JSON array, no other text
+        Field rules:
+        - store_name: string or null if not found
+        - name: translate to English if needed
+        - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
+        - price: number without currency symbol
+        - category: one of produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other
+        \(strictOutputRules)
         """
     }
 
+    // MARK: - Nutrition Label Prompts
+
     static let nutritionLabelImagePrompt = """
-        Extract nutrition information from this nutrition label image.
-        Convert all values to per 100g.
+        Extract nutrition values from this nutrition label image. Convert to per 100g.
 
-        Return JSON with this exact structure:
-        {
-          "calories": 0,
-          "protein": 0,
-          "carbohydrates": 0,
-          "fat": 0,
-          "saturatedFat": 0,
-          "sugar": 0,
-          "fiber": 0,
-          "sodium": 0
-        }
+        Required JSON structure:
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
 
-        Rules:
-        - All values per 100g
-        - Calories in kcal
-        - Protein, carbs, fat, saturatedFat, sugar, fiber in grams
-        - Sodium in mg
-        - If a value is not shown, estimate based on food type or use 0
-        - Only return the JSON object, no other text
+        Field rules:
+        - All macros in grams per 100g
+        - calories: kcal per 100g
+        - sodium: mg per 100g
+        - Use 0 for missing values, estimate if possible
+        \(strictOutputRules)
         """
 
     static func nutritionLabelTextPrompt(_ text: String) -> String {
         """
-        Parse this nutrition label text and extract nutrition values.
-        Convert all values to per 100g.
+        Extract nutrition values from this text. Convert to per 100g.
 
         Nutrition label text:
         \(text)
 
-        Return JSON with this exact structure:
-        {
-          "calories": 0,
-          "protein": 0,
-          "carbohydrates": 0,
-          "fat": 0,
-          "saturatedFat": 0,
-          "sugar": 0,
-          "fiber": 0,
-          "sodium": 0
-        }
+        Required JSON structure:
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
 
-        Rules:
-        - All values per 100g
-        - Calories in kcal
-        - Protein, carbs, fat, saturatedFat, sugar, fiber in grams
-        - Sodium in mg
-        - If a value is not shown, use 0
-        - Only return the JSON object, no other text
+        Field rules:
+        - All macros in grams per 100g
+        - calories: kcal per 100g
+        - sodium: mg per 100g
+        - Use 0 for missing values
+        \(strictOutputRules)
         """
     }
+
+    // MARK: - Nutrition Estimation Prompt
 
     static func estimateNutritionPrompt(foodName: String, category: String) -> String {
         """
-        Estimate typical nutrition values for: \(foodName) (category: \(category))
+        Estimate nutrition values for: \(foodName) (category: \(category))
 
-        Return JSON with this exact structure:
-        {
-          "calories": 0,
-          "protein": 0,
-          "carbohydrates": 0,
-          "fat": 0,
-          "saturatedFat": 0,
-          "sugar": 0,
-          "fiber": 0,
-          "sodium": 0
-        }
+        Required JSON structure:
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
 
-        Rules:
-        - All values per 100g
-        - Use typical/average values for this food
-        - Calories in kcal
-        - Protein, carbs, fat, saturatedFat, sugar, fiber in grams
-        - Sodium in mg
-        - Only return the JSON object, no other text
+        Field rules:
+        - All values per 100g based on typical values for this food
+        - calories: kcal
+        - protein/carbohydrates/fat/saturatedFat/sugar/fiber: grams
+        - sodium: mg
+        \(strictOutputRules)
         """
     }
 
+    // MARK: - Food Matching Prompt
+
     static func matchFoodPrompt(itemName: String, existingFoods: [String]) -> String {
-        let foodList = existingFoods.joined(separator: "\n")
+        let foodList = existingFoods.isEmpty ? "(none)" : existingFoods.joined(separator: ", ")
         return """
-        Match this receipt item to the most similar food in the list.
+        Match "\(itemName)" to the most similar food from: \(foodList)
 
-        Receipt item: "\(itemName)"
+        Required JSON structure:
+        {"foodName":"matched name or null","confidence":0.85,"isNewFood":false}
 
-        Existing foods:
-        \(foodList.isEmpty ? "(empty list)" : foodList)
-
-        Return JSON with this exact structure:
-        {
-          "foodName": "matched food name or null if no match",
-          "confidence": 0.0 to 1.0,
-          "isNewFood": true/false
-        }
-
-        Rules:
-        - If confidence < 0.7, set isNewFood to true
-        - If list is empty, set isNewFood to true
-        - foodName should be null if isNewFood is true
-        - Only return the JSON object, no other text
+        Field rules:
+        - foodName: exact name from list, or null if no good match
+        - confidence: 0.0 to 1.0
+        - isNewFood: true if confidence < 0.7 or no match, false otherwise
+        - If list is empty, return {"foodName":null,"confidence":0,"isNewFood":true}
+        \(strictOutputRules)
         """
     }
 }
@@ -170,6 +150,8 @@ enum LLMPrompts {
 enum LLMJSONParser {
     static func parse<T: Decodable>(_ string: String, as type: T.Type) throws -> T {
         var cleaned = string.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Remove markdown code blocks if present (fallback for non-compliant responses)
         if cleaned.hasPrefix("```json") {
             cleaned = String(cleaned.dropFirst(7))
         } else if cleaned.hasPrefix("```") {
@@ -180,12 +162,33 @@ enum LLMJSONParser {
         }
         cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Find JSON boundaries (handle any text before/after)
+        if let jsonStart = cleaned.firstIndex(where: { $0 == "{" || $0 == "[" }),
+           let jsonEnd = cleaned.lastIndex(where: { $0 == "}" || $0 == "]" }) {
+            cleaned = String(cleaned[jsonStart...jsonEnd])
+        }
+
         guard let data = cleaned.data(using: .utf8) else {
             throw LLMError.parseError("Invalid UTF-8 string")
         }
 
         do {
             return try JSONDecoder().decode(type, from: data)
+        } catch let decodingError as DecodingError {
+            let detail: String
+            switch decodingError {
+            case .keyNotFound(let key, _):
+                detail = "Missing key: \(key.stringValue)"
+            case .typeMismatch(let type, let context):
+                detail = "Type mismatch for \(context.codingPath.map(\.stringValue).joined(separator: ".")): expected \(type)"
+            case .valueNotFound(let type, let context):
+                detail = "Null value for \(context.codingPath.map(\.stringValue).joined(separator: ".")): expected \(type)"
+            case .dataCorrupted(let context):
+                detail = "Corrupted data: \(context.debugDescription)"
+            @unknown default:
+                detail = decodingError.localizedDescription
+            }
+            throw LLMError.parseError(detail)
         } catch {
             throw LLMError.parseError(error.localizedDescription)
         }

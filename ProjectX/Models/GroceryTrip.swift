@@ -14,6 +14,26 @@ final class GroceryTrip {
         items.reduce(0) { $0 + $1.price }
     }
 
+    /// Total nutrition for all non-skipped items with linked foods
+    var totalNutrition: NutritionInfo {
+        let validItems = items.filter { !$0.isSkipped }
+        return NutritionInfo(
+            calories: validItems.compactMap { $0.calculatedNutrition?.calories }.reduce(0, +),
+            protein: validItems.compactMap { $0.calculatedNutrition?.protein }.reduce(0, +),
+            carbohydrates: validItems.compactMap { $0.calculatedNutrition?.carbohydrates }.reduce(0, +),
+            fat: validItems.compactMap { $0.calculatedNutrition?.fat }.reduce(0, +),
+            saturatedFat: validItems.compactMap { $0.calculatedNutrition?.saturatedFat }.reduce(0, +),
+            sugar: validItems.compactMap { $0.calculatedNutrition?.sugar }.reduce(0, +),
+            fiber: validItems.compactMap { $0.calculatedNutrition?.fiber }.reduce(0, +),
+            sodium: validItems.compactMap { $0.calculatedNutrition?.sodium }.reduce(0, +)
+        )
+    }
+
+    /// Number of items that have nutrition data
+    var itemsWithNutrition: Int {
+        items.filter { !$0.isSkipped && $0.calculatedNutrition != nil }.count
+    }
+
     init(
         id: UUID = UUID(),
         date: Date = Date(),

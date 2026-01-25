@@ -36,16 +36,7 @@ struct NewFoodSheet: View {
     @State private var nutritionSource: NutritionSource = .aiEstimate
     @State private var showNutritionEntry = false
     @State private var showLabelScanner = false
-
-    @State private var calories = ""
-    @State private var protein = ""
-    @State private var carbohydrates = ""
-    @State private var fat = ""
-    @State private var saturatedFat = ""
-    @State private var sugar = ""
-    @State private var fiber = ""
-    @State private var sodium = ""
-
+    @State private var nutrition = NutritionFields()
     @State private var isEstimating = false
     @State private var estimationError: String?
     @State private var settings = AppSettings()
@@ -67,75 +58,42 @@ struct NewFoodSheet: View {
 
             Section("Nutrition Source") {
                 ForEach(NutritionSource.allCases) { source in
-                    Button {
+                    NutritionSourceButton(source: source, isSelected: nutritionSource == source) {
                         nutritionSource = source
                         handleSourceSelection(source)
-                    } label: {
-                        HStack {
-                            Image(systemName: source.icon)
-                                .frame(width: 24)
-                                .foregroundStyle(.blue)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(source.rawValue).font(.headline)
-                                Text(source.description)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if nutritionSource == source {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
-            if showNutritionEntry || !calories.isEmpty {
-                Section("Nutrition per 100g") {
-                    NutritionFieldRow(label: "Calories", value: $calories, unit: "kcal")
-                    NutritionFieldRow(label: "Protein", value: $protein, unit: "g")
-                    NutritionFieldRow(label: "Carbohydrates", value: $carbohydrates, unit: "g")
-                    NutritionFieldRow(label: "Fat", value: $fat, unit: "g")
-                    NutritionFieldRow(label: "Saturated Fat", value: $saturatedFat, unit: "g")
-                    NutritionFieldRow(label: "Sugar", value: $sugar, unit: "g")
-                    NutritionFieldRow(label: "Fiber", value: $fiber, unit: "g")
-                    NutritionFieldRow(label: "Sodium", value: $sodium, unit: "mg")
-                }
+            if showNutritionEntry || nutrition.hasValues {
+                NutritionFormSection(fields: $nutrition)
             }
 
             if isEstimating {
                 Section {
                     HStack {
                         ProgressView()
-                        Text("Estimating nutrition...")
-                            .foregroundStyle(.secondary)
+                        Text("Estimating nutrition...").foregroundStyle(.secondary)
                     }
                 }
             }
 
             if let error = estimationError {
-                Section {
-                    Text(error).foregroundStyle(.red).font(.caption)
-                }
+                Section { Text(error).foregroundStyle(Color.themeError).font(.caption) }
             }
         }
         .navigationTitle("New Food")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save", action: saveFood)
-                    .disabled(name.isEmpty || isEstimating)
+                Button("Save", action: saveFood).disabled(name.isEmpty || isEstimating)
             }
         }
         .fullScreenCover(isPresented: $showLabelScanner) {
             NavigationStack {
-                NutritionLabelScanView { nutrition in
-                    populateNutrition(from: nutrition)
+                NutritionLabelScanView { extracted in
+                    nutrition.populate(from: extracted)
                     showLabelScanner = false
                     showNutritionEntry = true
                 }
@@ -153,7 +111,6 @@ struct NewFoodSheet: View {
 
     private func estimateNutrition() async {
         guard !name.isEmpty else { return }
-
         isEstimating = true
         estimationError = nil
 
@@ -164,8 +121,8 @@ struct NewFoodSheet: View {
         }
 
         do {
-            let nutrition = try await service.estimateNutrition(for: name, category: category.displayName)
-            populateNutrition(from: nutrition)
+            let result = try await service.estimateNutrition(for: name, category: category.displayName)
+            nutrition.populate(from: result)
             showNutritionEntry = true
         } catch let error as LLMError {
             estimationError = error.errorDescription
@@ -175,32 +132,9 @@ struct NewFoodSheet: View {
         isEstimating = false
     }
 
-    private func populateNutrition(from nutrition: ExtractedNutrition) {
-        calories = String(format: "%.1f", nutrition.calories)
-        protein = String(format: "%.1f", nutrition.protein)
-        carbohydrates = String(format: "%.1f", nutrition.carbohydrates)
-        fat = String(format: "%.1f", nutrition.fat)
-        saturatedFat = String(format: "%.1f", nutrition.saturatedFat)
-        sugar = String(format: "%.1f", nutrition.sugar)
-        fiber = String(format: "%.1f", nutrition.fiber)
-        sodium = String(format: "%.1f", nutrition.sodium)
-    }
-
     private func saveFood() {
-        let nutrition = NutritionInfo(
-            calories: Double(calories) ?? 0,
-            protein: Double(protein) ?? 0,
-            carbohydrates: Double(carbohydrates) ?? 0,
-            fat: Double(fat) ?? 0,
-            saturatedFat: Double(saturatedFat) ?? 0,
-            sugar: Double(sugar) ?? 0,
-            fiber: Double(fiber) ?? 0,
-            sodium: Double(sodium) ?? 0
-        )
-
-        let food = Food(name: name, category: category, nutrition: nutrition)
+        let food = Food(name: name, category: category, nutrition: nutrition.toNutritionInfo())
         context.insert(food)
-
         do {
             try context.save()
             onSave(food)
@@ -209,3 +143,29 @@ struct NewFoodSheet: View {
         }
     }
 }
+
+// MARK: - Helpers
+
+private struct NutritionSourceButton: View {
+    let source: NutritionSource
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                Image(systemName: source.icon).frame(width: 24).foregroundStyle(Color.themePrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.rawValue).font(.headline)
+                    Text(source.description).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.themePrimary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+

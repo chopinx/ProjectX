@@ -12,6 +12,7 @@ import SwiftData
 struct ProjectXApp: App {
     @State private var settings = AppSettings()
     @State private var importManager = ImportManager()
+    @State private var scanFlowManager = ScanFlowManager()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -37,6 +38,7 @@ struct ProjectXApp: App {
         WindowGroup {
             ContentView(settings: settings)
                 .environment(\.importManager, importManager)
+                .environment(\.scanFlowManager, scanFlowManager)
                 .onAppear {
                     setupDefaultData()
                 }

@@ -20,14 +20,14 @@ final class OpenAIService: LLMService {
         _ = try await sendRequest(body: body)
     }
 
-    func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem] {
+    func extractReceipt(from image: UIImage) async throws -> ExtractedReceipt {
         let response = try await sendVisionRequest(prompt: LLMPrompts.receiptImagePrompt, image: image)
-        return try LLMJSONParser.parse(response, as: [ExtractedReceiptItem].self)
+        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
     }
 
-    func extractReceiptItems(from text: String) async throws -> [ExtractedReceiptItem] {
+    func extractReceipt(from text: String) async throws -> ExtractedReceipt {
         let response = try await sendTextRequest(prompt: LLMPrompts.receiptTextPrompt(text))
-        return try LLMJSONParser.parse(response, as: [ExtractedReceiptItem].self)
+        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
     }
 
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition {

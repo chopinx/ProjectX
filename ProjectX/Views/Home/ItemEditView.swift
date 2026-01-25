@@ -57,7 +57,7 @@ struct ItemEditView: View {
             } footer: {
                 if !quantity.isEmpty && Double(quantity) == nil {
                     Text("Please enter a valid number for quantity")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.themeError)
                 }
             }
 

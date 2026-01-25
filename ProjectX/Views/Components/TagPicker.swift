@@ -36,7 +36,7 @@ struct TagPicker: View {
                     showingCreateTag = true
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.themePrimary)
                 }
             }
         }
@@ -88,13 +88,6 @@ struct TagPicker: View {
     }
 }
 
-extension TagPicker {
-    func isDuplicateTagName(_ name: String) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespaces).lowercased()
-        return allTags.contains { $0.name.lowercased() == trimmed }
-    }
-}
-
 private struct TagChip: View {
     let tag: Tag
     let isSelected: Bool
@@ -138,7 +131,7 @@ private struct CreateTagSheet: View {
                 if isDuplicate {
                     Text("A tag with this name already exists")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.themeError)
                 }
             }
 

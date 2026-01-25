@@ -325,6 +325,7 @@
 				DEVELOPMENT_TEAM = R743AM4955;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Allow ProjectX to take photos of receipts and nutrition labels.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow ProjectX to access your receipt photos to extract grocery items.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -359,6 +360,7 @@
 				DEVELOPMENT_TEAM = R743AM4955;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Allow ProjectX to take photos of receipts and nutrition labels.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow ProjectX to access your receipt photos to extract grocery items.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

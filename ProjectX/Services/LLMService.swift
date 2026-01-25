@@ -3,6 +3,16 @@ import UIKit
 
 // MARK: - Response Types
 
+struct ExtractedReceipt: Codable {
+    var storeName: String?
+    var items: [ExtractedReceiptItem]
+
+    enum CodingKeys: String, CodingKey {
+        case storeName = "store_name"
+        case items
+    }
+}
+
 struct ExtractedReceiptItem: Codable, Identifiable {
     var id: UUID = UUID()
     var name: String
@@ -46,11 +56,11 @@ protocol LLMService {
     /// Validate the API key by making a simple test request
     func validateAPIKey() async throws
 
-    /// Extract items from a receipt image
-    func extractReceiptItems(from image: UIImage) async throws -> [ExtractedReceiptItem]
+    /// Extract items and store name from a receipt image
+    func extractReceipt(from image: UIImage) async throws -> ExtractedReceipt
 
-    /// Extract items from receipt text (copy-pasted or typed)
-    func extractReceiptItems(from text: String) async throws -> [ExtractedReceiptItem]
+    /// Extract items and store name from receipt text (copy-pasted or typed)
+    func extractReceipt(from text: String) async throws -> ExtractedReceipt
 
     /// Extract nutrition info from a nutrition label image
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition

@@ -46,4 +46,30 @@ final class NutritionInfo {
             sodium: sodium * factor
         )
     }
+
+    /// Copy values from another NutritionInfo
+    func copyValues(from other: NutritionInfo) {
+        calories = other.calories
+        protein = other.protein
+        carbohydrates = other.carbohydrates
+        fat = other.fat
+        saturatedFat = other.saturatedFat
+        sugar = other.sugar
+        fiber = other.fiber
+        sodium = other.sodium
+    }
+
+    /// Create from ExtractedNutrition
+    convenience init(from extracted: ExtractedNutrition) {
+        self.init(
+            calories: extracted.calories,
+            protein: extracted.protein,
+            carbohydrates: extracted.carbohydrates,
+            fat: extracted.fat,
+            saturatedFat: extracted.saturatedFat,
+            sugar: extracted.sugar,
+            fiber: extracted.fiber,
+            sodium: extracted.sodium
+        )
+    }
 }

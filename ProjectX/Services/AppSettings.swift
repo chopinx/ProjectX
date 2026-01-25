@@ -95,6 +95,25 @@ enum LLMModel: Equatable, Identifiable {
     }
 }
 
+struct NutritionTarget: Codable, Equatable {
+    var calories: Double
+    var protein: Double
+    var carbohydrates: Double
+    var fat: Double
+    var sugar: Double
+    var fiber: Double
+    var sodium: Double
+
+    static let `default` = NutritionTarget(
+        calories: 2000, protein: 50, carbohydrates: 250,
+        fat: 65, sugar: 50, fiber: 25, sodium: 2300
+    )
+
+    static var zero: NutritionTarget {
+        NutritionTarget(calories: 0, protein: 0, carbohydrates: 0, fat: 0, sugar: 0, fiber: 0, sodium: 0)
+    }
+}
+
 @Observable
 final class AppSettings {
     private let providerKey = "llm_provider"
@@ -102,6 +121,7 @@ final class AppSettings {
     private let claudeKeyKey = "claude_api_key"
     private let openaiModelKey = "openai_model"
     private let claudeModelKey = "claude_model"
+    private let nutritionTargetKey = "nutrition_target"
 
     var selectedProvider: LLMProvider {
         didSet {
@@ -130,6 +150,14 @@ final class AppSettings {
     var selectedClaudeModel: ClaudeModel {
         didSet {
             UserDefaults.standard.set(selectedClaudeModel.rawValue, forKey: claudeModelKey)
+        }
+    }
+
+    var dailyNutritionTarget: NutritionTarget {
+        didSet {
+            if let data = try? JSONEncoder().encode(dailyNutritionTarget) {
+                UserDefaults.standard.set(data, forKey: nutritionTargetKey)
+            }
         }
     }
 
@@ -162,5 +190,12 @@ final class AppSettings {
 
         let claudeModelRaw = UserDefaults.standard.string(forKey: claudeModelKey) ?? ClaudeModel.sonnet4.rawValue
         self.selectedClaudeModel = ClaudeModel(rawValue: claudeModelRaw) ?? .sonnet4
+
+        if let data = UserDefaults.standard.data(forKey: nutritionTargetKey),
+           let target = try? JSONDecoder().decode(NutritionTarget.self, from: data) {
+            self.dailyNutritionTarget = target
+        } else {
+            self.dailyNutritionTarget = .default
+        }
     }
 }

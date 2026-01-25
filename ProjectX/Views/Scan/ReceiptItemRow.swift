@@ -13,15 +13,8 @@ struct ReceiptItemRow: View {
                     Text(item.name)
                         .font(.headline)
                     HStack(spacing: 8) {
-                        Text("\(Int(item.quantityGrams))g")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(item.category)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.15))
-                            .clipShape(Capsule())
+                        Text("\(Int(item.quantityGrams))g").font(.caption).foregroundStyle(.secondary)
+                        CapsuleBadge(text: item.category)
                     }
                 }
                 Spacer()
@@ -33,37 +26,30 @@ struct ReceiptItemRow: View {
             HStack(spacing: 8) {
                 if let food = linkedFood {
                     HStack(spacing: 4) {
-                        Image(systemName: "link")
+                        Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
                         Text(food.name)
                             .font(.caption)
                     }
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.themeSuccess)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.green.opacity(0.1))
+                    .background(Color.themeSuccess.opacity(0.12))
                     .clipShape(Capsule())
                 }
 
                 Spacer()
 
-                Button {
-                    onEdit()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                        .font(.caption)
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil").font(.caption)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.bordered).controlSize(.small).tint(.themeInfo)
 
-                Button {
-                    onMatch()
-                } label: {
-                    Label(linkedFood == nil ? "Link" : "Change", systemImage: "fork.knife")
-                        .font(.caption)
+                Button(action: onMatch) {
+                    Label(linkedFood == nil ? "Link" : "Change", systemImage: "fork.knife").font(.caption)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.bordered).controlSize(.small)
+                .tint(linkedFood == nil ? .themePrimary : .themeSecondary)
             }
         }
         .padding(.vertical, 4)

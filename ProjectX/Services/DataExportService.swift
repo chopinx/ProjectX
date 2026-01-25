@@ -111,51 +111,21 @@ final class DataExportService {
             let linkedTags = foodData.tagNames.compactMap { tagsByName[$0.lowercased()] }
 
             if let existing = existingByName[foodData.name.lowercased()] {
-                // Replace existing
                 existing.categoryRaw = foodData.categoryRaw
                 existing.tags = linkedTags
                 existing.updatedAt = Date()
                 if let nutritionData = foodData.nutrition {
                     if let nutrition = existing.nutrition {
-                        nutrition.calories = nutritionData.calories
-                        nutrition.protein = nutritionData.protein
-                        nutrition.carbohydrates = nutritionData.carbohydrates
-                        nutrition.fat = nutritionData.fat
-                        nutrition.saturatedFat = nutritionData.saturatedFat
-                        nutrition.sugar = nutritionData.sugar
-                        nutrition.fiber = nutritionData.fiber
-                        nutrition.sodium = nutritionData.sodium
+                        nutrition.copyValues(from: nutritionData.toNutritionInfo())
                     } else {
-                        existing.nutrition = NutritionInfo(
-                            calories: nutritionData.calories,
-                            protein: nutritionData.protein,
-                            carbohydrates: nutritionData.carbohydrates,
-                            fat: nutritionData.fat,
-                            saturatedFat: nutritionData.saturatedFat,
-                            sugar: nutritionData.sugar,
-                            fiber: nutritionData.fiber,
-                            sodium: nutritionData.sodium
-                        )
+                        existing.nutrition = nutritionData.toNutritionInfo()
                     }
                 }
             } else {
-                // Create new
-                let nutrition = foodData.nutrition.map {
-                    NutritionInfo(
-                        calories: $0.calories,
-                        protein: $0.protein,
-                        carbohydrates: $0.carbohydrates,
-                        fat: $0.fat,
-                        saturatedFat: $0.saturatedFat,
-                        sugar: $0.sugar,
-                        fiber: $0.fiber,
-                        sodium: $0.sodium
-                    )
-                }
                 let food = Food(
                     name: foodData.name,
                     category: FoodCategory(rawValue: foodData.categoryRaw),
-                    nutrition: nutrition,
+                    nutrition: foodData.nutrition?.toNutritionInfo(),
                     tags: linkedTags
                 )
                 modelContext.insert(food)
@@ -239,14 +209,8 @@ struct TagExport: Codable {
 }
 
 struct NutritionExport: Codable {
-    let calories: Double
-    let protein: Double
-    let carbohydrates: Double
-    let fat: Double
-    let saturatedFat: Double
-    let sugar: Double
-    let fiber: Double
-    let sodium: Double
+    let calories, protein, carbohydrates, fat: Double
+    let saturatedFat, sugar, fiber, sodium: Double
 
     init(from info: NutritionInfo) {
         self.calories = info.calories
@@ -257,6 +221,11 @@ struct NutritionExport: Codable {
         self.sugar = info.sugar
         self.fiber = info.fiber
         self.sodium = info.sodium
+    }
+
+    func toNutritionInfo() -> NutritionInfo {
+        NutritionInfo(calories: calories, protein: protein, carbohydrates: carbohydrates,
+                      fat: fat, saturatedFat: saturatedFat, sugar: sugar, fiber: fiber, sodium: sodium)
     }
 }
 

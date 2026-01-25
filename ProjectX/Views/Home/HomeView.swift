@@ -6,6 +6,7 @@ struct HomeView: View {
     @Query(sort: \GroceryTrip.date, order: .reverse) private var trips: [GroceryTrip]
 
     @State private var showingNewTrip = false
+    @State private var tripToDelete: GroceryTrip?
 
     var body: some View {
         NavigationStack {
@@ -14,35 +15,30 @@ struct HomeView: View {
                     ContentUnavailableView(
                         "No Trips Yet",
                         systemImage: "cart.badge.plus",
-                        description: Text("Tap + to add your first grocery trip")
+                        description: Text("Tap + to add your first grocery trip, or use Scan to import a receipt")
                     )
                 } else {
                     ForEach(trips) { trip in
                         NavigationLink {
                             TripDetailView(trip: trip)
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(tripTitle(for: trip))
-                                    .font(.headline)
-                                HStack {
-                                    Text("\(trip.items.count) item\(trip.items.count == 1 ? "" : "s")")
-                                    Spacer()
-                                    Text(String(format: "%.2f", trip.totalSpent))
-                                        .fontWeight(.medium)
-                                }
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            TripRow(trip: trip, title: tripTitle(for: trip))
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                tripToDelete = trip
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
                         }
                     }
-                    .onDelete(perform: deleteTrips)
                 }
             }
             .navigationTitle("Home")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showingNewTrip = true } label: {
-                        Image(systemName: "plus")
+                        Label("Add Trip", systemImage: "plus")
                     }
                 }
             }
@@ -50,6 +46,12 @@ struct HomeView: View {
                 NavigationStack {
                     TripDetailView(trip: nil)
                 }
+            }
+            .deleteConfirmation("Delete Trip?", item: $tripToDelete, message: { trip in
+                "This will permanently delete \"\(tripTitle(for: trip))\" and all its items."
+            }) { trip in
+                withAnimation { context.delete(trip) }
+                try? context.save()
             }
         }
     }
@@ -64,10 +66,31 @@ struct HomeView: View {
         return dateStr
     }
 
-    private func deleteTrips(at offsets: IndexSet) {
-        for index in offsets {
-            context.delete(trips[index])
+}
+
+// MARK: - Trip Row
+
+private struct TripRow: View {
+    let trip: GroceryTrip
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.headline)
+            HStack {
+                Text("\(trip.items.count) item\(trip.items.count == 1 ? "" : "s")")
+                Spacer()
+                Text(String(format: "%.2f", trip.totalSpent))
+                    .fontWeight(.medium)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            // Show nutrition if any items have nutrition data
+            if trip.itemsWithNutrition > 0 {
+                NutritionSummaryRow(nutrition: trip.totalNutrition, isCompact: false)
+            }
         }
-        try? context.save()
     }
 }

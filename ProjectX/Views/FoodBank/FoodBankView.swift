@@ -10,130 +10,233 @@ struct FoodBankView: View {
 
     @State private var searchText = ""
     @State private var selectedMainCategory: FoodMainCategory?
+    @State private var selectedSubcategory: FoodSubcategory?
     @State private var selectedTag: Tag?
     @State private var showingAddFood = false
+    @State private var foodToDelete: Food?
 
-    var filteredFoods: [Food] {
-        var result = foods
-        if let mainCategory = selectedMainCategory {
-            result = result.filter { $0.category.main == mainCategory }
+    private var filteredFoods: [Food] {
+        foods.filter { food in
+            (selectedMainCategory == nil || food.category.main == selectedMainCategory) &&
+            (selectedSubcategory == nil || food.category.sub == selectedSubcategory) &&
+            (selectedTag == nil || food.tags.contains { $0.id == selectedTag?.id }) &&
+            (searchText.isEmpty || food.name.localizedCaseInsensitiveContains(searchText))
         }
-        if let tag = selectedTag {
-            result = result.filter { $0.tags.contains(where: { $0.id == tag.id }) }
-        }
-        if !searchText.isEmpty {
-            result = result.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
-        }
-        return result
+    }
+
+    private var foodCountByCategory: [FoodMainCategory: Int] {
+        Dictionary(grouping: foods, by: { $0.category.main }).mapValues(\.count)
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                if foods.isEmpty {
-                    ContentUnavailableView(
-                        "No Foods Yet",
-                        systemImage: "fork.knife",
-                        description: Text("Tap + to add your first food item")
-                    )
-                } else {
-                    ForEach(filteredFoods) { food in
-                        NavigationLink {
-                            FoodDetailView(food: food)
-                        } label: {
-                            HStack {
-                                Image(systemName: food.category.icon)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 30)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(food.name)
-                                        .font(.headline)
-                                    if let nutrition = food.nutrition {
-                                        Text("\(Int(nutrition.calories)) kcal per 100g")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    if !food.tags.isEmpty {
-                                        HStack(spacing: 4) {
-                                            ForEach(food.tags.prefix(3)) { tag in
-                                                Text(tag.name)
-                                                    .font(.caption2)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(tag.color.opacity(0.2))
-                                                    .foregroundStyle(tag.color)
-                                                    .clipShape(Capsule())
-                                            }
-                                            if food.tags.count > 3 {
-                                                Text("+\(food.tags.count - 3)")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .onDelete(perform: deleteFoods)
-                }
+            HStack(spacing: 0) {
+                categorySideBar
+                Divider()
+                contentArea
             }
-            .searchable(text: $searchText, prompt: "Search foods")
             .navigationTitle("Food Bank")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Search foods")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 12) {
-                        Menu {
-                            Button("All Categories") { selectedMainCategory = nil }
-                            Divider()
-                            ForEach(FoodMainCategory.allCases) { category in
-                                Button {
-                                    selectedMainCategory = category
-                                } label: {
-                                    Label(category.displayName, systemImage: category.icon)
-                                }
-                            }
-                        } label: {
-                            Label("Category", systemImage: selectedMainCategory == nil
-                                ? "line.3.horizontal.decrease.circle"
-                                : "line.3.horizontal.decrease.circle.fill")
-                        }
-
-                        if !allTags.isEmpty {
-                            Menu {
-                                Button("All Tags") { selectedTag = nil }
-                                Divider()
-                                ForEach(allTags) { tag in
-                                    Button {
-                                        selectedTag = tag
-                                    } label: {
-                                        Label(tag.name, systemImage: selectedTag?.id == tag.id ? "checkmark" : "tag")
-                                    }
-                                }
-                            } label: {
-                                Label("Tag", systemImage: selectedTag == nil ? "tag" : "tag.fill")
-                            }
-                        }
-                    }
-                }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showingAddFood = true } label: {
-                        Image(systemName: "plus")
-                    }
+                    Button { showingAddFood = true } label: { Label("Add Food", systemImage: "plus") }
                 }
             }
-            .sheet(isPresented: $showingAddFood) {
-                NavigationStack {
-                    FoodDetailView(food: nil)
-                }
-            }
+        }
+        .sheet(isPresented: $showingAddFood) {
+            NavigationStack { FoodDetailView(food: nil) }
+        }
+        .deleteConfirmation("Delete Food?", item: $foodToDelete, message: { "Delete \"\($0.name)\"?" }) { food in
+            withAnimation { context.delete(food) }
+            try? context.save()
         }
     }
 
-    private func deleteFoods(at offsets: IndexSet) {
-        for index in offsets {
-            context.delete(filteredFoods[index])
+    // MARK: - Side Bar
+
+    private var categorySideBar: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 4) {
+                SideTabItem(icon: "square.grid.2x2", title: "All", count: foods.count,
+                           isSelected: selectedMainCategory == nil, color: .themePrimary) {
+                    withAnimation { selectedMainCategory = nil; selectedSubcategory = nil }
+                }
+                Divider().padding(.vertical, 4)
+                ForEach(FoodMainCategory.allCases) { cat in
+                    SideTabItem(icon: cat.icon, title: cat.displayName, count: foodCountByCategory[cat] ?? 0,
+                               isSelected: selectedMainCategory == cat, color: cat.themeColor) {
+                        withAnimation { selectedMainCategory = cat; selectedSubcategory = nil }
+                    }
+                }
+            }
+            .padding(.vertical, 8)
         }
-        try? context.save()
+        .frame(width: 72)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    // MARK: - Content Area
+
+    private var contentArea: some View {
+        VStack(spacing: 0) {
+            if let cat = selectedMainCategory, !cat.subcategories.isEmpty {
+                filterBar {
+                    FilterChip("All", isSelected: selectedSubcategory == nil, color: cat.themeColor) {
+                        selectedSubcategory = nil
+                    }
+                    ForEach(cat.subcategories) { sub in
+                        FilterChip(sub.displayName, isSelected: selectedSubcategory == sub, color: cat.themeColor) {
+                            selectedSubcategory = sub
+                        }
+                    }
+                }
+            }
+            if !allTags.isEmpty {
+                filterBar {
+                    ForEach(allTags) { tag in
+                        TagChip(tag: tag, isSelected: selectedTag?.id == tag.id) {
+                            withAnimation { selectedTag = selectedTag?.id == tag.id ? nil : tag }
+                        }
+                    }
+                }
+            }
+            foodList
+        }
+    }
+
+    private func filterBar<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8, content: content).padding(.horizontal).padding(.vertical, 8)
+        }
+        .background(Color(.secondarySystemBackground))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    // MARK: - Food List
+
+    private var foodList: some View {
+        List {
+            if foods.isEmpty {
+                ContentUnavailableView("No Foods Yet", systemImage: "fork.knife",
+                    description: Text("Tap + to add a food manually"))
+            } else if filteredFoods.isEmpty {
+                ContentUnavailableView("No Results", systemImage: "magnifyingglass",
+                    description: Text("Try adjusting your filters"))
+            } else {
+                ForEach(filteredFoods) { food in
+                    NavigationLink { FoodDetailView(food: food) } label: { FoodRow(food: food) }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) { foodToDelete = food } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                }
+            }
+        }
+        .listStyle(.plain)
+    }
+}
+
+// MARK: - Components
+
+private struct SideTabItem: View {
+    let icon: String, title: String, count: Int, isSelected: Bool, color: Color
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.title3)
+                        .frame(width: 44, height: 32)
+                        .background(isSelected ? color : .clear)
+                        .foregroundStyle(isSelected ? .white : color)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4).padding(.vertical, 1)
+                            .background(isSelected ? Color.white.opacity(0.3) : color)
+                            .clipShape(Capsule())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+                Text(title)
+                    .font(.system(size: 10))
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? color : .secondary)
+            }
+            .frame(width: 64).padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FilterChip: View {
+    let title: String, isSelected: Bool, color: Color
+    let onTap: () -> Void
+
+    init(_ title: String, isSelected: Bool, color: Color, onTap: @escaping () -> Void) {
+        self.title = title; self.isSelected = isSelected; self.color = color; self.onTap = onTap
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            Text(title)
+                .font(.caption).fontWeight(isSelected ? .semibold : .regular)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(isSelected ? color : Color(.tertiarySystemBackground))
+                .foregroundStyle(isSelected ? .white : .primary)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct TagChip: View {
+    let tag: Tag, isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                Circle().fill(tag.color).frame(width: 8, height: 8)
+                Text(tag.name).font(.caption).fontWeight(isSelected ? .semibold : .regular)
+                if isSelected { Image(systemName: "xmark").font(.caption2) }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(isSelected ? tag.color.opacity(0.2) : Color(.secondarySystemBackground))
+            .foregroundStyle(isSelected ? tag.color : .primary)
+            .clipShape(Capsule())
+            .overlay(isSelected ? Capsule().stroke(tag.color, lineWidth: 1) : nil)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FoodRow: View {
+    let food: Food
+
+    var body: some View {
+        HStack {
+            Image(systemName: food.category.icon).foregroundStyle(.secondary).frame(width: 30)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(food.name).font(.headline)
+                HStack(spacing: 8) {
+                    if let n = food.nutrition { Text("\(Int(n.calories)) kcal").font(.caption).foregroundStyle(.secondary) }
+                    if food.category.sub != nil { CapsuleBadge(text: food.category.displayName) }
+                }
+                if !food.tags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(food.tags.prefix(3)) { CapsuleBadge(text: $0.name, color: $0.color) }
+                        if food.tags.count > 3 { Text("+\(food.tags.count - 3)").font(.caption2).foregroundStyle(.secondary) }
+                    }
+                }
+            }
+        }
     }
 }

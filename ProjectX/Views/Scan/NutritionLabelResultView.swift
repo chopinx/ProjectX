@@ -40,14 +40,8 @@ struct NutritionLabelResultView: View {
     }
 
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 50))
-                .foregroundStyle(.orange)
-            Text("Extraction Failed").font(.title3).fontWeight(.semibold)
-            Text(error).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Try Again") { Task { await extractNutrition() } }
-                .buttonStyle(.borderedProminent)
+        ErrorStateView("Extraction Failed", message: error) {
+            Task { await extractNutrition() }
         }
         .padding()
     }

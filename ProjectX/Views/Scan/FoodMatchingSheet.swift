@@ -157,8 +157,8 @@ private struct FoodSelectionRow: View {
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.15))
-                                .foregroundStyle(.blue)
+                                .background(Color.themePrimary.opacity(0.15))
+                                .foregroundStyle(Color.themePrimary)
                                 .clipShape(Capsule())
                         }
                     }
@@ -171,7 +171,7 @@ private struct FoodSelectionRow: View {
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.themePrimary)
                 }
             }
         }
