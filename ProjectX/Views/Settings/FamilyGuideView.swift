@@ -3,284 +3,205 @@ import SwiftUI
 struct FamilyGuideView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var settings: AppSettings
-    @State private var step: Step = .members
+    @State private var step = 0
     @State private var members: [FamilyMember] = []
+    @State private var activitySelections: [UUID: ActivityLevel] = [:]
+    @State private var dietSelections: [UUID: DietType] = [:]
     @State private var editingMember: FamilyMember?
     @State private var suggestion: SuggestedNutritionTargets?
     @State private var editedTarget: NutritionTarget?
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    enum Step: Int, CaseIterable {
-        case members, details, review, generate, edit
-
-        var title: String {
-            switch self {
-            case .members: return "Family Members"
-            case .details: return "Activity & Diet"
-            case .review: return "Review"
-            case .generate: return "AI Suggestion"
-            case .edit: return "Adjust Targets"
-            }
-        }
-    }
+    private let titles = ["Members", "Activity", "Review", "Generate", "Adjust"]
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                stepIndicator
+                HStack(spacing: 4) { ForEach(0..<5, id: \.self) { Capsule().fill($0 <= step ? Color.themePrimary : Color.gray.opacity(0.3)).frame(height: 4) } }
+                    .padding(.horizontal).padding(.vertical, 8)
                 Divider()
-                content
+                stepContent
             }
-            .navigationTitle(step.title)
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(titles[step]).navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { nextButton }
             }
-            .onAppear { members = settings.familyMembers.isEmpty ? [FamilyMember(name: "Member 1")] : settings.familyMembers }
-            .alert("Error", isPresented: .constant(errorMessage != nil)) {
-                Button("OK") { errorMessage = nil }
-            } message: { Text(errorMessage ?? "") }
-            .sheet(item: $editingMember) { member in
-                MemberEditSheet(member: member) { updated in
-                    if let idx = members.firstIndex(where: { $0.id == updated.id }) {
-                        members[idx] = updated
-                    }
+            .onAppear { loadMembers() }
+            .alert("Error", isPresented: .constant(errorMessage != nil)) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
+            .sheet(item: $editingMember) { m in
+                MemberEditSheet(member: m) { updated in
+                    if let i = members.firstIndex(where: { $0.id == updated.id }) { members[i] = updated }
                     editingMember = nil
                 }
             }
         }
     }
 
-    // MARK: - Step Indicator
-
-    private var stepIndicator: some View {
-        HStack(spacing: 4) {
-            ForEach(Step.allCases, id: \.self) { s in
-                Capsule()
-                    .fill(s.rawValue <= step.rawValue ? Color.themePrimary : Color.gray.opacity(0.3))
-                    .frame(height: 4)
-            }
+    private func loadMembers() {
+        guard members.isEmpty else { return }
+        members = settings.familyMembers.isEmpty ? [FamilyMember(name: "Member 1")] : settings.familyMembers
+        for m in members {
+            activitySelections[m.id] = m.activityLevel
+            dietSelections[m.id] = m.dietType
         }
-        .padding(.horizontal).padding(.vertical, 8)
     }
 
-    // MARK: - Content
+    private func activity(for id: UUID) -> Binding<ActivityLevel> {
+        Binding(get: { activitySelections[id] ?? .moderate }, set: { activitySelections[id] = $0 })
+    }
+
+    private func diet(for id: UUID) -> Binding<DietType> {
+        Binding(get: { dietSelections[id] ?? .standard }, set: { dietSelections[id] = $0 })
+    }
+
+    private func finalMembers() -> [FamilyMember] {
+        members.map { m in
+            var updated = m
+            updated.activityLevel = activitySelections[m.id] ?? m.activityLevel
+            updated.dietType = dietSelections[m.id] ?? m.dietType
+            return updated
+        }
+    }
 
     @ViewBuilder
-    private var content: some View {
+    private var stepContent: some View {
         switch step {
-        case .members: membersStep
-        case .details: detailsStep
-        case .review: reviewStep
-        case .generate: generateStep
-        case .edit: editStep
+        case 0: membersView
+        case 1: detailsView
+        case 2: reviewView
+        case 3: generateView
+        default: editView
         }
     }
 
-    // MARK: - Members Step
-
-    private var membersStep: some View {
+    private var membersView: some View {
         List {
-            Section {
-                ForEach(members) { member in
+            Section("Household") {
+                ForEach(members) { m in
                     HStack {
                         VStack(alignment: .leading) {
-                            Text(member.name.isEmpty ? "Unnamed" : member.name).font(.headline)
-                            Text("\(member.age) years, \(Int(member.weight)) kg").font(.caption).foregroundStyle(.secondary)
+                            Text(m.name.isEmpty ? "Unnamed" : m.name).font(.headline)
+                            Text("\(m.age)y, \(Int(m.weight))kg").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button { editingMember = member } label: {
-                            Image(systemName: "pencil")
-                                .font(.body)
-                                .foregroundStyle(Color.themePrimary)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
+                        Button { editingMember = m } label: { Image(systemName: "pencil").frame(width: 44, height: 44).contentShape(Rectangle()) }
                     }
-                }
-                .onDelete { members.remove(atOffsets: $0) }
-            } header: { Text("Household Members") }
-
-            Section {
-                Button { members.append(FamilyMember(name: "Member \(members.count + 1)")) } label: {
-                    Label("Add Member", systemImage: "plus.circle.fill")
-                }
-            }
-        }
-    }
-
-    // MARK: - Details Step
-
-    private var detailsStep: some View {
-        List {
-            ForEach(members.indices, id: \.self) { index in
-                let member = members[index]
-                Section(member.name.isEmpty ? "Member" : member.name) {
-                    Picker("Activity", selection: $members[index].activityLevel) {
-                        ForEach(ActivityLevel.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    Text(member.activityLevel.description).font(.caption).foregroundStyle(.secondary)
-
-                    Picker("Diet", selection: $members[index].dietType) {
-                        ForEach(DietType.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    Text(member.dietType.description).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    // MARK: - Review Step
-
-    private var reviewStep: some View {
-        List {
-            ForEach(members) { member in
-                Section(member.name) {
-                    LabeledContent("Age", value: "\(member.age) years")
-                    LabeledContent("Weight", value: "\(Int(member.weight)) kg")
-                    LabeledContent("Activity", value: member.activityLevel.rawValue)
-                    LabeledContent("Diet", value: member.dietType.rawValue)
-                    LabeledContent("Est. Calories", value: "\(member.estimatedCalories) kcal")
+                }.onDelete { idx in
+                    for i in idx { activitySelections.removeValue(forKey: members[i].id); dietSelections.removeValue(forKey: members[i].id) }
+                    members.remove(atOffsets: idx)
                 }
             }
             Section {
-                let total = members.reduce(0) { $0 + $1.estimatedCalories }
-                LabeledContent("Household Total", value: "\(total) kcal").fontWeight(.semibold)
+                Button {
+                    let m = FamilyMember(name: "Member \(members.count + 1)")
+                    members.append(m)
+                    activitySelections[m.id] = m.activityLevel
+                    dietSelections[m.id] = m.dietType
+                } label: { Label("Add", systemImage: "plus.circle.fill") }
             }
         }
     }
 
-    // MARK: - Generate Step
+    private var detailsView: some View {
+        List {
+            ForEach(members) { m in
+                Section(m.name.isEmpty ? "Member" : m.name) {
+                    Picker("Activity", selection: activity(for: m.id)) { ForEach(ActivityLevel.allCases) { Text($0.rawValue).tag($0) } }
+                    Text((activitySelections[m.id] ?? m.activityLevel).description).font(.caption).foregroundStyle(.secondary)
+                    Picker("Diet", selection: diet(for: m.id)) { ForEach(DietType.allCases) { Text($0.rawValue).tag($0) } }
+                    Text((dietSelections[m.id] ?? m.dietType).description).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
 
-    private var generateStep: some View {
+    private var reviewView: some View {
+        let final = finalMembers()
+        return List {
+            ForEach(final) { m in
+                Section(m.name) {
+                    LabeledContent("Age", value: "\(m.age)y"); LabeledContent("Weight", value: "\(Int(m.weight))kg")
+                    LabeledContent("Activity", value: m.activityLevel.rawValue); LabeledContent("Diet", value: m.dietType.rawValue)
+                    LabeledContent("Est. Calories", value: "\(m.estimatedCalories) kcal")
+                }
+            }
+            Section { LabeledContent("Total", value: "\(final.reduce(0) { $0 + $1.estimatedCalories }) kcal").fontWeight(.semibold) }
+        }
+    }
+
+    private var generateView: some View {
         Group {
             if isLoading {
-                VStack(spacing: 16) {
-                    ProgressView().scaleEffect(1.5)
-                    Text("Generating personalized targets...").foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let suggestion {
+                VStack(spacing: 16) { ProgressView().scaleEffect(1.5); Text("Generating...").foregroundStyle(.secondary) }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let s = suggestion {
                 List {
-                    Section("AI Recommendation") {
-                        Text(suggestion.explanation).font(.callout).foregroundStyle(.secondary)
+                    Section("AI Recommendation") { Text(s.explanation).font(.callout).foregroundStyle(.secondary) }
+                    Section("Daily Targets") {
+                        LabeledContent("Calories", value: "\(Int(s.calories)) kcal"); LabeledContent("Protein", value: "\(Int(s.protein))g")
+                        LabeledContent("Carbs", value: "\(Int(s.carbohydrates))g"); LabeledContent("Fat", value: "\(Int(s.fat))g")
+                        LabeledContent("Sugar", value: "≤\(Int(s.sugar))g"); LabeledContent("Fiber", value: "\(Int(s.fiber))g"); LabeledContent("Sodium", value: "≤\(Int(s.sodium))mg")
                     }
-                    Section("Suggested Daily Targets") {
-                        LabeledContent("Calories", value: "\(Int(suggestion.calories)) kcal")
-                        LabeledContent("Protein", value: "\(Int(suggestion.protein)) g")
-                        LabeledContent("Carbs", value: "\(Int(suggestion.carbohydrates)) g")
-                        LabeledContent("Fat", value: "\(Int(suggestion.fat)) g")
-                        LabeledContent("Sugar", value: "≤ \(Int(suggestion.sugar)) g")
-                        LabeledContent("Fiber", value: "\(Int(suggestion.fiber)) g")
-                        LabeledContent("Sodium", value: "≤ \(Int(suggestion.sodium)) mg")
-                    }
-                    Section {
-                        Button { Task { await generateSuggestion() } } label: {
-                            Label("Regenerate Suggestion", systemImage: "arrow.clockwise")
-                        }
-                    }
+                    Section { Button { Task { await generate() } } label: { Label("Regenerate", systemImage: "arrow.clockwise") } }
                 }
-            } else {
-                ContentUnavailableView("Ready to Generate", systemImage: "sparkles", description: Text("Tap Next to get AI-powered nutrition targets"))
-            }
-        }
-        .task { if suggestion == nil { await generateSuggestion() } }
+            } else { ContentUnavailableView("Ready", systemImage: "sparkles", description: Text("Tap Next for AI targets")) }
+        }.task { if suggestion == nil { await generate() } }
     }
 
-    // MARK: - Edit Step
-
-    private var editStep: some View {
-        let target = Binding(
-            get: { editedTarget ?? suggestion?.toNutritionTarget() ?? .default },
-            set: { editedTarget = $0 }
-        )
+    private var editView: some View {
+        let t = Binding(get: { editedTarget ?? suggestion?.toNutritionTarget() ?? .default }, set: { editedTarget = $0 })
         return List {
-            Section("Adjust Your Targets") {
-                TargetEditRow("Calories", value: target.calories, unit: "kcal")
-                TargetEditRow("Protein", value: target.protein, unit: "g")
-                TargetEditRow("Carbs", value: target.carbohydrates, unit: "g")
-                TargetEditRow("Fat", value: target.fat, unit: "g")
-                TargetEditRow("Sugar", value: target.sugar, unit: "g")
-                TargetEditRow("Fiber", value: target.fiber, unit: "g")
-                TargetEditRow("Sodium", value: target.sodium, unit: "mg")
+            Section("Adjust Targets") {
+                TR("Calories", t.calories, "kcal"); TR("Protein", t.protein, "g"); TR("Carbs", t.carbohydrates, "g")
+                TR("Fat", t.fat, "g"); TR("Sugar", t.sugar, "g"); TR("Fiber", t.fiber, "g"); TR("Sodium", t.sodium, "mg")
             }
         }
     }
 
-    // MARK: - Next Button
-
-    @ViewBuilder
-    private var nextButton: some View {
+    @ViewBuilder private var nextButton: some View {
         switch step {
-        case .members:
-            Button("Next") { step = .details }.disabled(members.isEmpty)
-        case .details:
-            Button("Next") { step = .review }
-        case .review:
-            Button("Generate") { step = .generate }
-        case .generate:
-            Button("Next") { editedTarget = suggestion?.toNutritionTarget(); step = .edit }
-                .disabled(suggestion == nil || isLoading)
-        case .edit:
-            Button("Save") { save() }
+        case 0: Button("Next") { step = 1 }.disabled(members.isEmpty)
+        case 1: Button("Next") { step = 2 }
+        case 2: Button("Generate") { step = 3 }
+        case 3: Button("Next") { editedTarget = suggestion?.toNutritionTarget(); step = 4 }.disabled(suggestion == nil || isLoading)
+        default: Button("Save") { save() }
         }
     }
 
-    // MARK: - Actions
-
-    private func generateSuggestion() async {
-        guard settings.isConfigured else {
-            errorMessage = "Please configure your API key in Settings first."
-            return
-        }
+    private func generate() async {
+        guard settings.isConfigured else { errorMessage = "Configure API key first"; return }
         isLoading = true
-        do {
-            guard let service = LLMServiceFactory.create(settings: settings) else { return }
-            suggestion = try await service.suggestNutritionTargets(for: members)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoading = false
+        defer { isLoading = false }
+        do { if let svc = LLMServiceFactory.create(settings: settings) { suggestion = try await svc.suggestNutritionTargets(for: finalMembers()) } }
+        catch { errorMessage = error.localizedDescription }
     }
 
     private func save() {
-        settings.familyMembers = members
+        settings.familyMembers = finalMembers()
         settings.dailyNutritionTarget = editedTarget ?? suggestion?.toNutritionTarget() ?? .default
         settings.hasCompletedFamilyGuide = true
         dismiss()
     }
 }
 
-// MARK: - Member Edit Sheet
-
 private struct MemberEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State var member: FamilyMember
     let onSave: (FamilyMember) -> Void
+    private var dobRange: ClosedRange<Date> { Calendar.current.date(byAdding: .year, value: -120, to: Date())!...Calendar.current.date(byAdding: .year, value: -1, to: Date())! }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Basic Info") {
+                Section("Info") {
                     TextField("Name", text: $member.name)
-                    Stepper("Age: \(member.age)", value: $member.age, in: 1...120)
-                    HStack {
-                        Text("Weight")
-                        Spacer()
-                        TextField("kg", value: $member.weight, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("kg").foregroundStyle(.secondary)
-                    }
+                    DatePicker("DOB", selection: $member.dateOfBirth, in: dobRange, displayedComponents: .date)
+                    HStack { Text("Weight"); Spacer(); TextField("", value: $member.weight, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 60); Text("kg").foregroundStyle(.secondary) }
                 }
+                Section { LabeledContent("Age", value: "\(member.age) years").foregroundStyle(.secondary) }
             }
-            .navigationTitle("Edit Member")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Edit").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { onSave(member); dismiss() } }
@@ -289,28 +210,8 @@ private struct MemberEditSheet: View {
     }
 }
 
-// MARK: - Target Edit Row
-
-private struct TargetEditRow: View {
-    let label: String
-    @Binding var value: Double
-    let unit: String
-
-    init(_ label: String, value: Binding<Double>, unit: String) {
-        self.label = label
-        self._value = value
-        self.unit = unit
-    }
-
-    var body: some View {
-        HStack {
-            Text(label)
-            Spacer()
-            TextField("0", value: $value, format: .number)
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
-            Text(unit).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
-        }
-    }
+private struct TR: View {
+    let l: String; @Binding var v: Double; let u: String
+    init(_ l: String, _ v: Binding<Double>, _ u: String) { self.l = l; _v = v; self.u = u }
+    var body: some View { HStack { Text(l); Spacer(); TextField("", value: $v, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 70); Text(u).foregroundStyle(.secondary).frame(width: 35) } }
 }

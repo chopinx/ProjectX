@@ -30,19 +30,15 @@ struct NutritionSummary {
         )
     }
 
-    static func forTrips(_ trips: [GroceryTrip], in dateRange: ClosedRange<Date>? = nil, excludingTagNames: Set<String> = []) -> NutritionSummary {
+    static func forTrips(_ trips: [GroceryTrip], in dateRange: ClosedRange<Date>? = nil, excludePantryStaples: Bool = false) -> NutritionSummary {
         var summary = NutritionSummary.zero
 
         let filteredTrips = dateRange.map { range in trips.filter { range.contains($0.date) } } ?? trips
 
         for trip in filteredTrips {
             for item in trip.items where !item.isSkipped {
-                // Skip items with excluded tags
-                if !excludingTagNames.isEmpty,
-                   let food = item.food,
-                   food.tags.contains(where: { excludingTagNames.contains($0.name) }) {
-                    continue
-                }
+                // Skip pantry staples if requested
+                if excludePantryStaples, let food = item.food, food.isPantryStaple { continue }
 
                 guard let nutrition = item.calculatedNutrition else { continue }
                 summary.totalCalories += nutrition.calories

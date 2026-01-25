@@ -9,6 +9,7 @@ struct FoodDetailView: View {
     @State private var name: String
     @State private var category: FoodCategory
     @State private var selectedTags: [Tag]
+    @State private var isPantryStaple: Bool
     @State private var nutrition: NutritionFields
     @State private var showingSaveError = false
     @State private var isAISuggesting = false
@@ -22,6 +23,7 @@ struct FoodDetailView: View {
         _name = State(initialValue: food?.name ?? "")
         _category = State(initialValue: food?.category ?? .other)
         _selectedTags = State(initialValue: food?.tags ?? [])
+        _isPantryStaple = State(initialValue: food?.isPantryStaple ?? false)
         _nutrition = State(initialValue: NutritionFields(from: food?.nutrition))
     }
 
@@ -30,6 +32,12 @@ struct FoodDetailView: View {
             Section("Basic Info") {
                 TextField("Name", text: $name)
                 CategoryPicker(selection: $category)
+                Toggle(isOn: $isPantryStaple) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Pantry Staple")
+                        Text("Long-lasting items like salt, oil, spices").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 aiSuggestButton
             }
 
@@ -124,10 +132,11 @@ struct FoodDetailView: View {
             food.name = name
             food.category = category
             food.tags = selectedTags
+            food.isPantryStaple = isPantryStaple
             food.nutrition = nutritionInfo
             food.updatedAt = .now
         } else {
-            let food = Food(name: name, category: category, nutrition: nutritionInfo, tags: selectedTags)
+            let food = Food(name: name, category: category, nutrition: nutritionInfo, tags: selectedTags, isPantryStaple: isPantryStaple)
             context.insert(food)
         }
 

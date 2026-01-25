@@ -1,303 +1,172 @@
 import Foundation
 import SwiftData
 
-/// Data types that can be exported/imported
 enum ExportDataType: String, CaseIterable, Identifiable {
-    case foods = "Food Bank"
-    case tags = "Tags"
-    case trips = "Grocery Trips"
-
+    case foods = "Food Bank", tags = "Tags", trips = "Grocery Trips"
     var id: String { rawValue }
-    var icon: String {
-        switch self {
-        case .foods: return "fork.knife"
-        case .tags: return "tag.fill"
-        case .trips: return "cart.fill"
-        }
-    }
+    var icon: String { ["foods": "fork.knife", "tags": "tag.fill", "trips": "cart.fill"][rawValue.lowercased().components(separatedBy: " ").first!] ?? "doc" }
 }
 
-/// Service for exporting and importing app data
 final class DataExportService {
-    private let modelContext: ModelContext
+    private let ctx: ModelContext
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-    }
+    init(modelContext: ModelContext) { self.ctx = modelContext }
 
     // MARK: - Export
 
     func exportData(types: Set<ExportDataType>) throws -> Data {
-        var exportData = ExportContainer()
-
-        if types.contains(.tags) {
-            let tags = try modelContext.fetch(FetchDescriptor<Tag>(sortBy: [SortDescriptor(\.name)]))
-            exportData.tags = tags.map { TagExport(from: $0) }
-        }
-
-        if types.contains(.foods) {
-            let foods = try modelContext.fetch(FetchDescriptor<Food>(sortBy: [SortDescriptor(\.name)]))
-            exportData.foods = foods.map { FoodExport(from: $0) }
-        }
-
-        if types.contains(.trips) {
-            let trips = try modelContext.fetch(FetchDescriptor<GroceryTrip>(sortBy: [SortDescriptor(\.date, order: .reverse)]))
-            exportData.trips = trips.map { TripExport(from: $0) }
-        }
-
-        exportData.exportDate = Date()
-        exportData.version = "1.0"
-
+        var export = ExportContainer()
+        if types.contains(.tags) { export.tags = try fetch(Tag.self, sort: \.name).map { TagExport(from: $0) } }
+        if types.contains(.foods) { export.foods = try fetch(Food.self, sort: \.name).map { FoodExport(from: $0) } }
+        if types.contains(.trips) { export.trips = try fetch(GroceryTrip.self, sort: \.date, reverse: true).map { TripExport(from: $0) } }
+        export.exportDate = Date()
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(exportData)
+        return try encoder.encode(export)
     }
 
     // MARK: - Import
 
     func importData(from data: Data, types: Set<ExportDataType>) throws -> ImportResult {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let container = try decoder.decode(ExportContainer.self, from: data)
-
+        let container = try decode(data)
         var result = ImportResult()
-
-        if types.contains(.tags), let tags = container.tags {
-            result.tagsImported = importTags(tags)
-        }
-
-        if types.contains(.foods), let foods = container.foods {
-            result.foodsImported = importFoods(foods)
-        }
-
-        if types.contains(.trips), let trips = container.trips {
-            result.tripsImported = importTrips(trips)
-        }
-
-        try modelContext.save()
+        if types.contains(.tags), let tags = container.tags { result.tagsImported = importTags(tags) }
+        if types.contains(.foods), let foods = container.foods { result.foodsImported = importFoods(foods) }
+        if types.contains(.trips), let trips = container.trips { result.tripsImported = importTrips(trips) }
+        try ctx.save()
         return result
     }
 
-    private func importTags(_ tags: [TagExport]) -> Int {
-        let existingTags = (try? modelContext.fetch(FetchDescriptor<Tag>())) ?? []
-        let existingByName = Dictionary(uniqueKeysWithValues: existingTags.map { ($0.name.lowercased(), $0) })
+    func previewImport(from data: Data) throws -> ImportPreview {
+        let c = try decode(data)
+        return ImportPreview(tagsCount: c.tags?.count ?? 0, foodsCount: c.foods?.count ?? 0, tripsCount: c.trips?.count ?? 0, exportDate: c.exportDate)
+    }
 
-        var imported = 0
-        for tagData in tags {
-            if let existing = existingByName[tagData.name.lowercased()] {
-                // Replace existing
-                existing.colorHex = tagData.colorHex
-            } else {
-                // Create new
-                let tag = Tag(name: tagData.name, colorHex: tagData.colorHex)
-                modelContext.insert(tag)
-            }
-            imported += 1
+    // MARK: - Helpers
+
+    private func fetch<T: PersistentModel>(_ type: T.Type, sort: KeyPath<T, some Comparable>, reverse: Bool = false) throws -> [T] {
+        try ctx.fetch(FetchDescriptor<T>(sortBy: [SortDescriptor(sort, order: reverse ? .reverse : .forward)]))
+    }
+
+    private func decode(_ data: Data) throws -> ExportContainer {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(ExportContainer.self, from: data)
+    }
+
+    private func importTags(_ tags: [TagExport]) -> Int {
+        let existing = Dictionary(uniqueKeysWithValues: ((try? ctx.fetch(FetchDescriptor<Tag>())) ?? []).map { ($0.name.lowercased(), $0) })
+        for t in tags {
+            if let e = existing[t.name.lowercased()] { e.colorHex = t.colorHex }
+            else { ctx.insert(Tag(name: t.name, colorHex: t.colorHex)) }
         }
-        return imported
+        return tags.count
     }
 
     private func importFoods(_ foods: [FoodExport]) -> Int {
-        let existingFoods = (try? modelContext.fetch(FetchDescriptor<Food>())) ?? []
-        let existingByName = Dictionary(uniqueKeysWithValues: existingFoods.map { ($0.name.lowercased(), $0) })
+        let existing = Dictionary(uniqueKeysWithValues: ((try? ctx.fetch(FetchDescriptor<Food>())) ?? []).map { ($0.name.lowercased(), $0) })
+        let tagsByName = Dictionary(uniqueKeysWithValues: ((try? ctx.fetch(FetchDescriptor<Tag>())) ?? []).map { ($0.name.lowercased(), $0) })
 
-        // Get all tags for linking
-        let allTags = (try? modelContext.fetch(FetchDescriptor<Tag>())) ?? []
-        let tagsByName = Dictionary(uniqueKeysWithValues: allTags.map { ($0.name.lowercased(), $0) })
-
-        var imported = 0
-        for foodData in foods {
-            let linkedTags = foodData.tagNames.compactMap { tagsByName[$0.lowercased()] }
-
-            if let existing = existingByName[foodData.name.lowercased()] {
-                existing.categoryRaw = foodData.categoryRaw
-                existing.tags = linkedTags
-                existing.updatedAt = Date()
-                if let nutritionData = foodData.nutrition {
-                    if let nutrition = existing.nutrition {
-                        nutrition.copyValues(from: nutritionData.toNutritionInfo())
-                    } else {
-                        existing.nutrition = nutritionData.toNutritionInfo()
-                    }
+        for f in foods {
+            let linkedTags = f.tagNames.compactMap { tagsByName[$0.lowercased()] }
+            if let e = existing[f.name.lowercased()] {
+                e.categoryRaw = f.categoryRaw
+                e.tags = linkedTags
+                e.isPantryStaple = f.isPantryStaple ?? false
+                e.updatedAt = Date()
+                if let n = f.nutrition {
+                    if let en = e.nutrition { en.copyValues(from: n.toNutritionInfo()) }
+                    else { e.nutrition = n.toNutritionInfo() }
                 }
             } else {
-                let food = Food(
-                    name: foodData.name,
-                    category: FoodCategory(rawValue: foodData.categoryRaw),
-                    nutrition: foodData.nutrition?.toNutritionInfo(),
-                    tags: linkedTags
-                )
-                modelContext.insert(food)
+                ctx.insert(Food(name: f.name, category: FoodCategory(rawValue: f.categoryRaw), nutrition: f.nutrition?.toNutritionInfo(),
+                                tags: linkedTags, isUserCreated: f.isUserCreated ?? true, isPantryStaple: f.isPantryStaple ?? false))
+            }
+        }
+        return foods.count
+    }
+
+    private func importTrips(_ trips: [TripExport]) -> Int {
+        let existingIds = Set(((try? ctx.fetch(FetchDescriptor<GroceryTrip>())) ?? []).map(\.id))
+        let foodsByName = Dictionary(uniqueKeysWithValues: ((try? ctx.fetch(FetchDescriptor<Food>())) ?? []).map { ($0.name.lowercased(), $0) })
+
+        var imported = 0
+        for t in trips where !existingIds.contains(t.id) {
+            let trip = GroceryTrip(id: t.id, date: t.date, storeName: t.storeName)
+            ctx.insert(trip)
+            for i in t.items {
+                let item = PurchasedItem(id: i.id, name: i.name, quantity: i.quantity, price: i.price,
+                                         food: i.foodName.flatMap { foodsByName[$0.lowercased()] }, isSkipped: i.isSkipped)
+                item.trip = trip
+                trip.items.append(item)
             }
             imported += 1
         }
         return imported
     }
-
-    private func importTrips(_ trips: [TripExport]) -> Int {
-        let existingTrips = (try? modelContext.fetch(FetchDescriptor<GroceryTrip>())) ?? []
-        let existingIds = Set(existingTrips.map { $0.id })
-
-        // Get all foods for linking
-        let allFoods = (try? modelContext.fetch(FetchDescriptor<Food>())) ?? []
-        let foodsByName = Dictionary(uniqueKeysWithValues: allFoods.map { ($0.name.lowercased(), $0) })
-
-        var imported = 0
-        for tripData in trips {
-            if !existingIds.contains(tripData.id) {
-                let trip = GroceryTrip(
-                    id: tripData.id,
-                    date: tripData.date,
-                    storeName: tripData.storeName
-                )
-                modelContext.insert(trip)
-
-                for itemData in tripData.items {
-                    let linkedFood = itemData.foodName.flatMap { foodsByName[$0.lowercased()] }
-                    let item = PurchasedItem(
-                        id: itemData.id,
-                        name: itemData.name,
-                        quantity: itemData.quantity,
-                        price: itemData.price,
-                        food: linkedFood,
-                        isSkipped: itemData.isSkipped
-                    )
-                    item.trip = trip
-                    trip.items.append(item)
-                }
-                imported += 1
-            }
-        }
-        return imported
-    }
-
-    // MARK: - Preview Available Data
-
-    func previewImport(from data: Data) throws -> ImportPreview {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let container = try decoder.decode(ExportContainer.self, from: data)
-
-        return ImportPreview(
-            tagsCount: container.tags?.count ?? 0,
-            foodsCount: container.foods?.count ?? 0,
-            tripsCount: container.trips?.count ?? 0,
-            exportDate: container.exportDate
-        )
-    }
 }
 
-// MARK: - Export Data Structures
+// MARK: - Export Structures
 
 struct ExportContainer: Codable {
-    var version: String = "1.0"
-    var exportDate: Date?
-    var tags: [TagExport]?
-    var foods: [FoodExport]?
-    var trips: [TripExport]?
+    var version = "1.0", exportDate: Date?, tags: [TagExport]?, foods: [FoodExport]?, trips: [TripExport]?
 }
 
 struct TagExport: Codable {
-    let name: String
-    let colorHex: String
-
-    init(from tag: Tag) {
-        self.name = tag.name
-        self.colorHex = tag.colorHex
-    }
+    let name, colorHex: String
+    init(from t: Tag) { name = t.name; colorHex = t.colorHex }
 }
 
 struct NutritionExport: Codable {
-    let calories, protein, carbohydrates, fat: Double
-    let saturatedFat, sugar, fiber, sodium: Double
-
-    init(from info: NutritionInfo) {
-        self.calories = info.calories
-        self.protein = info.protein
-        self.carbohydrates = info.carbohydrates
-        self.fat = info.fat
-        self.saturatedFat = info.saturatedFat
-        self.sugar = info.sugar
-        self.fiber = info.fiber
-        self.sodium = info.sodium
+    let calories, protein, carbohydrates, fat, saturatedFat, sugar, fiber, sodium: Double
+    init(from n: NutritionInfo) {
+        calories = n.calories; protein = n.protein; carbohydrates = n.carbohydrates; fat = n.fat
+        saturatedFat = n.saturatedFat; sugar = n.sugar; fiber = n.fiber; sodium = n.sodium
     }
-
     func toNutritionInfo() -> NutritionInfo {
-        NutritionInfo(calories: calories, protein: protein, carbohydrates: carbohydrates,
-                      fat: fat, saturatedFat: saturatedFat, sugar: sugar, fiber: fiber, sodium: sodium)
+        NutritionInfo(calories: calories, protein: protein, carbohydrates: carbohydrates, fat: fat,
+                      saturatedFat: saturatedFat, sugar: sugar, fiber: fiber, sodium: sodium)
     }
 }
 
 struct FoodExport: Codable {
-    let name: String
-    let categoryRaw: String
+    let name, categoryRaw: String
     let nutrition: NutritionExport?
     let tagNames: [String]
+    let isPantryStaple, isUserCreated: Bool?
 
-    init(from food: Food) {
-        self.name = food.name
-        self.categoryRaw = food.categoryRaw
-        self.nutrition = food.nutrition.map { NutritionExport(from: $0) }
-        self.tagNames = food.tags.map { $0.name }
+    init(from f: Food) {
+        name = f.name; categoryRaw = f.categoryRaw; nutrition = f.nutrition.map { NutritionExport(from: $0) }
+        tagNames = f.tags.map(\.name); isPantryStaple = f.isPantryStaple; isUserCreated = f.isUserCreated
     }
 }
 
 struct PurchasedItemExport: Codable {
-    let id: UUID
-    let name: String
-    let quantity: Double
-    let price: Double
-    let foodName: String?
-    let isSkipped: Bool
-
-    init(from item: PurchasedItem) {
-        self.id = item.id
-        self.name = item.name
-        self.quantity = item.quantity
-        self.price = item.price
-        self.foodName = item.food?.name
-        self.isSkipped = item.isSkipped
+    let id: UUID, name: String, quantity: Double, price: Double, foodName: String?, isSkipped: Bool
+    init(from i: PurchasedItem) {
+        id = i.id; name = i.name; quantity = i.quantity; price = i.price; foodName = i.food?.name; isSkipped = i.isSkipped
     }
 }
 
 struct TripExport: Codable {
-    let id: UUID
-    let date: Date
-    let storeName: String?
-    let items: [PurchasedItemExport]
-
-    init(from trip: GroceryTrip) {
-        self.id = trip.id
-        self.date = trip.date
-        self.storeName = trip.storeName
-        self.items = trip.items.map { PurchasedItemExport(from: $0) }
-    }
+    let id: UUID, date: Date, storeName: String?, items: [PurchasedItemExport]
+    init(from t: GroceryTrip) { id = t.id; date = t.date; storeName = t.storeName; items = t.items.map { PurchasedItemExport(from: $0) } }
 }
 
 // MARK: - Import Result
 
 struct ImportResult {
-    var tagsImported: Int = 0
-    var foodsImported: Int = 0
-    var tripsImported: Int = 0
-
+    var tagsImported = 0, foodsImported = 0, tripsImported = 0
     var totalImported: Int { tagsImported + foodsImported + tripsImported }
-
     var summary: String {
-        var parts: [String] = []
-        if tagsImported > 0 { parts.append("\(tagsImported) tags") }
-        if foodsImported > 0 { parts.append("\(foodsImported) foods") }
-        if tripsImported > 0 { parts.append("\(tripsImported) trips") }
+        let parts = [(tagsImported, "tags"), (foodsImported, "foods"), (tripsImported, "trips")].filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }
         return parts.isEmpty ? "No new data imported" : "Imported: " + parts.joined(separator: ", ")
     }
 }
 
 struct ImportPreview {
-    let tagsCount: Int
-    let foodsCount: Int
-    let tripsCount: Int
+    let tagsCount, foodsCount, tripsCount: Int
     let exportDate: Date?
-
     var hasData: Bool { tagsCount > 0 || foodsCount > 0 || tripsCount > 0 }
 }

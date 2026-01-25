@@ -68,6 +68,12 @@ struct SettingsView: View {
             } message: {
                 Text(importErrorMessage)
             }
+            .sheet(isPresented: $showingNutritionTargetSheet) {
+                NutritionTargetSheet(target: $settings.dailyNutritionTarget)
+            }
+            .sheet(isPresented: $showingFamilyGuide) {
+                FamilyGuideView(settings: settings)
+            }
         }
     }
 
@@ -217,12 +223,6 @@ struct SettingsView: View {
             Text("Family Goals")
         } footer: {
             Text("Use the guide for AI-powered targets based on your family, or set targets manually.")
-        }
-        .sheet(isPresented: $showingNutritionTargetSheet) {
-            NutritionTargetSheet(target: $settings.dailyNutritionTarget)
-        }
-        .sheet(isPresented: $showingFamilyGuide) {
-            FamilyGuideView(settings: settings)
         }
     }
 

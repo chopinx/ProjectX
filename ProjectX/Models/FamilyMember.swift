@@ -81,24 +81,27 @@ enum DietType: String, CaseIterable, Identifiable, Codable {
 struct FamilyMember: Identifiable, Codable, Equatable {
     var id: UUID
     var name: String
-    var age: Int
+    var dateOfBirth: Date
     var weight: Double  // kg
     var activityLevel: ActivityLevel
     var dietType: DietType
 
-    init(id: UUID = UUID(), name: String = "", age: Int = 30, weight: Double = 70, activityLevel: ActivityLevel = .moderate, dietType: DietType = .standard) {
+    init(id: UUID = UUID(), name: String = "", dateOfBirth: Date? = nil, weight: Double = 70, activityLevel: ActivityLevel = .moderate, dietType: DietType = .standard) {
         self.id = id
         self.name = name
-        self.age = age
+        self.dateOfBirth = dateOfBirth ?? Calendar.current.date(byAdding: .year, value: -30, to: Date())!
         self.weight = weight
         self.activityLevel = activityLevel
         self.dietType = dietType
     }
 
+    var age: Int {
+        Calendar.current.dateComponents([.year], from: dateOfBirth, to: Date()).year ?? 0
+    }
+
     /// Estimated daily calories based on Mifflin-St Jeor equation
     var estimatedCalories: Int {
-        // Simplified BMR calculation (average of male/female formulas)
-        let bmr = 10 * weight + 6.25 * 170 - 5 * Double(age) + 5  // Assuming 170cm average height
+        let bmr = 10 * weight + 6.25 * 170 - 5 * Double(age) + 5
         return Int(bmr * activityLevel.multiplier)
     }
 }
