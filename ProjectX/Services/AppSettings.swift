@@ -122,6 +122,8 @@ final class AppSettings {
     private let openaiModelKey = "openai_model"
     private let claudeModelKey = "claude_model"
     private let nutritionTargetKey = "nutrition_target"
+    private let familyMembersKey = "family_members"
+    private let familyGuideCompletedKey = "family_guide_completed"
 
     var selectedProvider: LLMProvider {
         didSet {
@@ -161,6 +163,20 @@ final class AppSettings {
         }
     }
 
+    var familyMembers: [FamilyMember] {
+        didSet {
+            if let data = try? JSONEncoder().encode(familyMembers) {
+                UserDefaults.standard.set(data, forKey: familyMembersKey)
+            }
+        }
+    }
+
+    var hasCompletedFamilyGuide: Bool {
+        didSet {
+            UserDefaults.standard.set(hasCompletedFamilyGuide, forKey: familyGuideCompletedKey)
+        }
+    }
+
     var currentAPIKey: String {
         switch selectedProvider {
         case .openai: return openaiAPIKey
@@ -197,5 +213,14 @@ final class AppSettings {
         } else {
             self.dailyNutritionTarget = .default
         }
+
+        if let data = UserDefaults.standard.data(forKey: familyMembersKey),
+           let members = try? JSONDecoder().decode([FamilyMember].self, from: data) {
+            self.familyMembers = members
+        } else {
+            self.familyMembers = []
+        }
+
+        self.hasCompletedFamilyGuide = UserDefaults.standard.bool(forKey: familyGuideCompletedKey)
     }
 }

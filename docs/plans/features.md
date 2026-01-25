@@ -283,3 +283,109 @@ Food --> NutritionInfo (one-to-one, cascade delete)
 - `ProjectX/Models/NutritionInfo.swift`
 - `ProjectX/Models/NutritionSummary.swift`
 - `ProjectX/Models/FoodCategory.swift`
+- `ProjectX/Models/FamilyMember.swift`
+
+---
+
+## Family Nutrition Guide
+
+Multi-step wizard that collects family member profiles and uses LLM to generate personalized daily nutrition targets.
+
+### Family Member Profile
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Unique identifier |
+| name | String | Display name (e.g., "Dad", "Mom", "Emma") |
+| age | Int | Age in years |
+| weight | Double | Weight in kg |
+| activityLevel | ActivityLevel | Physical activity level |
+| dietType | DietType | Dietary preference |
+
+### Activity Levels
+
+| Level | Description | Multiplier |
+|-------|-------------|------------|
+| Sedentary | Little or no exercise | 1.2 |
+| Lightly Active | Light exercise 1-3 days/week | 1.375 |
+| Moderately Active | Moderate exercise 3-5 days/week | 1.55 |
+| Active | Hard exercise 6-7 days/week | 1.725 |
+| Very Active | Very hard exercise, physical job | 1.9 |
+
+### Diet Types
+
+| Type | Description |
+|------|-------------|
+| Standard | Balanced macros, no restrictions |
+| Vegetarian | No meat, includes dairy/eggs |
+| Vegan | No animal products |
+| Keto | Very low carb, high fat |
+| Mediterranean | High in olive oil, fish, vegetables |
+| High Protein | Higher protein for muscle building |
+| Low Sodium | Reduced sodium intake |
+
+### Wizard Steps
+
+1. **Members**: Add/edit family members (name, age, weight)
+2. **Details**: For each member, set activity level and diet preference
+3. **Review**: Summary of all members and their profiles
+4. **Generate**: LLM analyzes profiles and suggests nutrition targets
+5. **Edit**: Adjust suggested targets before saving
+
+### LLM Suggestion
+
+**Input to LLM:**
+```json
+{
+  "familyMembers": [
+    {
+      "name": "Dad",
+      "age": 40,
+      "weight": 80,
+      "activityLevel": "moderatelyActive",
+      "dietType": "standard"
+    },
+    {
+      "name": "Mom",
+      "age": 38,
+      "weight": 60,
+      "activityLevel": "lightlyActive",
+      "dietType": "mediterranean"
+    }
+  ]
+}
+```
+
+**Output from LLM:**
+```json
+{
+  "calories": 3200,
+  "protein": 120,
+  "carbohydrates": 400,
+  "fat": 100,
+  "sugar": 50,
+  "fiber": 50,
+  "sodium": 4600,
+  "explanation": "Combined daily targets for a 2-person household..."
+}
+```
+
+### User Actions
+
+- **Redo Guide**: Restart wizard from step 1
+- **Get New Suggestion**: Regenerate LLM recommendation with current profiles
+- **Edit Members**: Modify individual family member profiles
+- **Manual Override**: Adjust any suggested values before saving
+
+### Data Storage
+
+- Family members stored in UserDefaults as JSON array
+- `hasCompletedFamilyGuide` flag tracks completion
+- Generated targets saved to existing `dailyNutritionTarget`
+
+### Files
+
+- `ProjectX/Models/FamilyMember.swift` - FamilyMember struct, DietType enum
+- `ProjectX/Services/AppSettings.swift` - familyMembers storage, guide completion flag
+- `ProjectX/Services/LLMService.swift` - suggestNutritionTargets method
+- `ProjectX/Views/Settings/FamilyGuideView.swift` - Wizard UI

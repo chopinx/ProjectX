@@ -27,6 +27,11 @@ struct NutritionLabelResultView: View {
         }
         .navigationTitle("Nutrition Label")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button { dismiss() } label: { Image(systemName: "xmark").fontWeight(.medium) }
+            }
+        }
         .task(id: "extract") {
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }

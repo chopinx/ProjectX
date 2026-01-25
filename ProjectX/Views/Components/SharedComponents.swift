@@ -1,5 +1,19 @@
 import SwiftUI
 
+// MARK: - Press Feedback Button Style
+
+/// Button style that provides visual press feedback via opacity change
+struct PressFeedbackButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1.0)
+    }
+}
+
+extension ButtonStyle where Self == PressFeedbackButtonStyle {
+    static var pressFeedback: PressFeedbackButtonStyle { PressFeedbackButtonStyle() }
+}
+
 // MARK: - Capsule Badge
 
 /// Reusable capsule-styled badge for tags, categories, counts
@@ -83,10 +97,13 @@ struct DeleteConfirmationModifier<T>: ViewModifier {
             )) {
                 Button("Cancel", role: .cancel) { item = nil }
                 Button("Delete", role: .destructive) {
-                    if let toDelete = item {
+                    guard let toDelete = item else { return }
+                    // Clear item first to prevent SwiftUI from accessing deleted object
+                    item = nil
+                    // Delete after clearing the binding
+                    DispatchQueue.main.async {
                         onDelete(toDelete)
                     }
-                    item = nil
                 }
             } message: {
                 if let toDelete = item {
@@ -182,7 +199,7 @@ struct NutritionFields {
 
 // MARK: - Nutrition Form Section
 
-/// Reusable nutrition form section with all 8 nutrition fields
+/// Reusable nutrition form section with hierarchical nutrition fields
 struct NutritionFormSection: View {
     @Binding var fields: NutritionFields
 
@@ -191,10 +208,10 @@ struct NutritionFormSection: View {
             NutritionFieldRow(label: "Calories", value: $fields.calories, unit: "kcal")
             NutritionFieldRow(label: "Protein", value: $fields.protein, unit: "g")
             NutritionFieldRow(label: "Carbohydrates", value: $fields.carbohydrates, unit: "g")
+            NutritionFieldRow(label: "Sugar", value: $fields.sugar, unit: "g", isSubItem: true)
+            NutritionFieldRow(label: "Fiber", value: $fields.fiber, unit: "g", isSubItem: true)
             NutritionFieldRow(label: "Fat", value: $fields.fat, unit: "g")
-            NutritionFieldRow(label: "Saturated Fat", value: $fields.saturatedFat, unit: "g")
-            NutritionFieldRow(label: "Sugar", value: $fields.sugar, unit: "g")
-            NutritionFieldRow(label: "Fiber", value: $fields.fiber, unit: "g")
+            NutritionFieldRow(label: "Saturated Fat", value: $fields.saturatedFat, unit: "g", isSubItem: true)
             NutritionFieldRow(label: "Sodium", value: $fields.sodium, unit: "mg")
         }
     }

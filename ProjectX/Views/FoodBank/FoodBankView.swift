@@ -9,11 +9,22 @@ struct FoodBankView: View {
     @Query(sort: \Tag.name) private var allTags: [Tag]
 
     @State private var searchText = ""
-    @State private var selectedMainCategory: FoodMainCategory?
+    @AppStorage("foodBankCategory") private var selectedCategoryRaw: String?
     @State private var selectedSubcategory: FoodSubcategory?
     @State private var selectedTag: Tag?
     @State private var showingAddFood = false
+    @State private var showingAddOptions = false
+    @State private var showingNutritionScan = false
     @State private var foodToDelete: Food?
+
+    private var selectedMainCategory: FoodMainCategory? {
+        get { selectedCategoryRaw.flatMap { FoodMainCategory(rawValue: $0) } }
+    }
+
+    private func selectCategory(_ category: FoodMainCategory?) {
+        selectedCategoryRaw = category?.rawValue
+        selectedSubcategory = nil
+    }
 
     private var filteredFoods: [Food] {
         foods.filter { food in
@@ -40,12 +51,22 @@ struct FoodBankView: View {
             .searchable(text: $searchText, prompt: "Search foods")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showingAddFood = true } label: { Label("Add Food", systemImage: "plus") }
+                    Button { showingAddOptions = true } label: { Label("Add Food", systemImage: "plus") }
                 }
+            }
+            .confirmationDialog("Add Food", isPresented: $showingAddOptions, titleVisibility: .visible) {
+                Button("Scan Nutrition Label") { showingNutritionScan = true }
+                Button("Manual Entry") { showingAddFood = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("How would you like to add a food?")
             }
         }
         .sheet(isPresented: $showingAddFood) {
             NavigationStack { FoodDetailView(food: nil) }
+        }
+        .fullScreenCover(isPresented: $showingNutritionScan) {
+            ScanView(settings: settings, initialMode: .nutritionLabel, onDismiss: { showingNutritionScan = false })
         }
         .deleteConfirmation("Delete Food?", item: $foodToDelete, message: { "Delete \"\($0.name)\"?" }) { food in
             withAnimation { context.delete(food) }
@@ -60,13 +81,13 @@ struct FoodBankView: View {
             VStack(spacing: 4) {
                 SideTabItem(icon: "square.grid.2x2", title: "All", count: foods.count,
                            isSelected: selectedMainCategory == nil, color: .themePrimary) {
-                    withAnimation { selectedMainCategory = nil; selectedSubcategory = nil }
+                    withAnimation { selectCategory(nil) }
                 }
                 Divider().padding(.vertical, 4)
                 ForEach(FoodMainCategory.allCases) { cat in
                     SideTabItem(icon: cat.icon, title: cat.displayName, count: foodCountByCategory[cat] ?? 0,
                                isSelected: selectedMainCategory == cat, color: cat.themeColor) {
-                        withAnimation { selectedMainCategory = cat; selectedSubcategory = nil }
+                        withAnimation { selectCategory(cat) }
                     }
                 }
             }
@@ -148,31 +169,24 @@ private struct SideTabItem: View {
         Button(action: onTap) {
             VStack(spacing: 4) {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: icon)
-                        .font(.title3)
-                        .frame(width: 44, height: 32)
+                    Image(systemName: icon).font(.title3)
+                        .frame(width: 44, height: 36)
                         .background(isSelected ? color : .clear)
                         .foregroundStyle(isSelected ? .white : color)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     if count > 0 {
-                        Text("\(count)")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.white)
+                        Text("\(count)").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
                             .padding(.horizontal, 4).padding(.vertical, 1)
                             .background(isSelected ? Color.white.opacity(0.3) : color)
-                            .clipShape(Capsule())
-                            .offset(x: 4, y: -4)
+                            .clipShape(Capsule()).offset(x: 4, y: -4)
                     }
                 }
-                Text(title)
-                    .font(.system(size: 10))
-                    .fontWeight(isSelected ? .semibold : .regular)
-                    .lineLimit(1)
-                    .foregroundStyle(isSelected ? color : .secondary)
+                Text(title).font(.system(size: 10)).fontWeight(isSelected ? .semibold : .regular)
+                    .lineLimit(1).foregroundStyle(isSelected ? color : .secondary)
             }
-            .frame(width: 64).padding(.vertical, 6)
+            .frame(width: 64, height: 60).contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
     }
 }
 
@@ -186,14 +200,13 @@ private struct FilterChip: View {
 
     var body: some View {
         Button(action: onTap) {
-            Text(title)
-                .font(.caption).fontWeight(isSelected ? .semibold : .regular)
-                .padding(.horizontal, 12).padding(.vertical, 6)
+            Text(title).font(.subheadline).fontWeight(isSelected ? .semibold : .regular)
+                .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(isSelected ? color : Color(.tertiarySystemBackground))
                 .foregroundStyle(isSelected ? .white : .primary)
-                .clipShape(Capsule())
+                .clipShape(Capsule()).contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
     }
 }
 
@@ -203,18 +216,19 @@ private struct TagChip: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 4) {
-                Circle().fill(tag.color).frame(width: 8, height: 8)
-                Text(tag.name).font(.caption).fontWeight(isSelected ? .semibold : .regular)
-                if isSelected { Image(systemName: "xmark").font(.caption2) }
+            HStack(spacing: 6) {
+                Circle().fill(tag.color).frame(width: 10, height: 10)
+                Text(tag.name).font(.subheadline).fontWeight(isSelected ? .semibold : .regular)
+                if isSelected { Image(systemName: "xmark").font(.caption) }
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 10)
             .background(isSelected ? tag.color.opacity(0.2) : Color(.secondarySystemBackground))
             .foregroundStyle(isSelected ? tag.color : .primary)
             .clipShape(Capsule())
             .overlay(isSelected ? Capsule().stroke(tag.color, lineWidth: 1) : nil)
+            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftData
 struct AnalysisView: View {
     @Query(sort: \GroceryTrip.date) private var trips: [GroceryTrip]
     @State private var settings = AppSettings()
+    @AppStorage("excludePantryStaples") private var excludePantryStaples = false
 
     private var lastMonthRange: ClosedRange<Date> {
         let now = Date()
@@ -17,12 +18,16 @@ struct AnalysisView: View {
         return start...now
     }
 
+    private var excludedTags: Set<String> {
+        excludePantryStaples ? [Tag.pantryStapleTagName] : []
+    }
+
     private var lastMonthSummary: NutritionSummary {
-        NutritionSummary.forTrips(trips, in: lastMonthRange)
+        NutritionSummary.forTrips(trips, in: lastMonthRange, excludingTagNames: excludedTags)
     }
 
     private var yearToDateSummary: NutritionSummary {
-        NutritionSummary.forTrips(trips, in: yearToDateRange)
+        NutritionSummary.forTrips(trips, in: yearToDateRange, excludingTagNames: excludedTags)
     }
 
     var body: some View {
@@ -44,6 +49,23 @@ struct AnalysisView: View {
                         )
                         .padding(.top, 100)
                     } else {
+                        // Filter toggle
+                        Toggle(isOn: $excludePantryStaples) {
+                            HStack {
+                                Image(systemName: "shippingbox")
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Exclude Pantry Staples")
+                                    Text("Hide long-lasting items like salt, oil, spices")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
                         // Summary header
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Your daily nutrition averages compared to your family's targets")

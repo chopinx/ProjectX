@@ -50,6 +50,30 @@ struct FoodMatch: Codable, Identifiable {
     }
 }
 
+struct SuggestedFoodInfo: Codable {
+    var category: String
+    var subcategory: String?
+    var tags: [String]
+}
+
+struct SuggestedNutritionTargets: Codable {
+    var calories: Double
+    var protein: Double
+    var carbohydrates: Double
+    var fat: Double
+    var sugar: Double
+    var fiber: Double
+    var sodium: Double
+    var explanation: String
+
+    func toNutritionTarget() -> NutritionTarget {
+        NutritionTarget(
+            calories: calories, protein: protein, carbohydrates: carbohydrates,
+            fat: fat, sugar: sugar, fiber: fiber, sodium: sodium
+        )
+    }
+}
+
 // MARK: - Protocol
 
 protocol LLMService {
@@ -73,6 +97,12 @@ protocol LLMService {
 
     /// Match receipt item to foods in the food bank
     func matchFood(itemName: String, existingFoods: [String]) async throws -> FoodMatch
+
+    /// Suggest category and tags for a food item
+    func suggestCategoryAndTags(for foodName: String, availableTags: [String]) async throws -> SuggestedFoodInfo
+
+    /// Suggest daily nutrition targets based on family member profiles
+    func suggestNutritionTargets(for members: [FamilyMember]) async throws -> SuggestedNutritionTargets
 }
 
 // MARK: - Errors

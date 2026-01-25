@@ -153,19 +153,21 @@ private struct NutritionSourceButton: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack {
-                Image(systemName: source.icon).frame(width: 24).foregroundStyle(Color.themePrimary)
+            HStack(spacing: 12) {
+                Image(systemName: source.icon).font(.title3).frame(width: 32, height: 32).foregroundStyle(Color.themePrimary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(source.rawValue).font(.headline)
-                    Text(source.description).font(.caption).foregroundStyle(.secondary)
+                    Text(source.description).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.themePrimary)
+                    Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(Color.themePrimary)
                 }
             }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
     }
 }
 

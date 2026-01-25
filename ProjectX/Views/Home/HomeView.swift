@@ -3,9 +3,11 @@ import SwiftData
 
 struct HomeView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scanFlowManager) private var flowManager
     @Query(sort: \GroceryTrip.date, order: .reverse) private var trips: [GroceryTrip]
 
     @State private var showingNewTrip = false
+    @State private var showingAddOptions = false
     @State private var tripToDelete: GroceryTrip?
 
     var body: some View {
@@ -37,15 +39,20 @@ struct HomeView: View {
             .navigationTitle("Home")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showingNewTrip = true } label: {
+                    Button { showingAddOptions = true } label: {
                         Label("Add Trip", systemImage: "plus")
                     }
                 }
             }
+            .confirmationDialog("Add Trip", isPresented: $showingAddOptions, titleVisibility: .visible) {
+                Button("Scan Receipt") { flowManager.requestScanForReceipt() }
+                Button("Manual Entry") { showingNewTrip = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("How would you like to add a grocery trip?")
+            }
             .sheet(isPresented: $showingNewTrip) {
-                NavigationStack {
-                    TripDetailView(trip: nil)
-                }
+                NavigationStack { TripDetailView(trip: nil) }
             }
             .deleteConfirmation("Delete Trip?", item: $tripToDelete, message: { trip in
                 "This will permanently delete \"\(tripTitle(for: trip))\" and all its items."

@@ -41,14 +41,14 @@ struct ReceiptItemRow: View {
                 Spacer()
 
                 Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil").font(.caption)
+                    Label("Edit", systemImage: "pencil").font(.subheadline)
                 }
-                .buttonStyle(.bordered).controlSize(.small).tint(.themeInfo)
+                .buttonStyle(.bordered).controlSize(.regular).tint(.themeInfo)
 
                 Button(action: onMatch) {
-                    Label(linkedFood == nil ? "Link" : "Change", systemImage: "fork.knife").font(.caption)
+                    Label(linkedFood == nil ? "Link" : "Change", systemImage: "fork.knife").font(.subheadline)
                 }
-                .buttonStyle(.bordered).controlSize(.small)
+                .buttonStyle(.bordered).controlSize(.regular)
                 .tint(linkedFood == nil ? .themePrimary : .themeSecondary)
             }
         }

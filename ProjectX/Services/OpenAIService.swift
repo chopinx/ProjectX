@@ -50,6 +50,16 @@ final class OpenAIService: LLMService {
         return try LLMJSONParser.parse(response, as: FoodMatch.self)
     }
 
+    func suggestCategoryAndTags(for foodName: String, availableTags: [String]) async throws -> SuggestedFoodInfo {
+        let response = try await sendTextRequest(prompt: LLMPrompts.suggestCategoryAndTagsPrompt(foodName: foodName, availableTags: availableTags))
+        return try LLMJSONParser.parse(response, as: SuggestedFoodInfo.self)
+    }
+
+    func suggestNutritionTargets(for members: [FamilyMember]) async throws -> SuggestedNutritionTargets {
+        let response = try await sendTextRequest(prompt: LLMPrompts.suggestNutritionTargetsPrompt(members: members))
+        return try LLMJSONParser.parse(response, as: SuggestedNutritionTargets.self)
+    }
+
     // MARK: - Private
 
     private func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {

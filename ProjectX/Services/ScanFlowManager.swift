@@ -8,6 +8,7 @@ final class ScanFlowManager {
     var showReviewFromText = false
     var showNutritionFromText = false
     var showScanTypeSelection = false
+    var requestScanTab = false  // Request to open Scan tab
 
     // Pending data - stored as base64 for images to survive app backgrounding
     var pendingOCRText: String?
@@ -54,6 +55,10 @@ final class ScanFlowManager {
 
     func clearSelectionState() {
         showScanTypeSelection = false
+    }
+
+    func requestScanForReceipt() {
+        requestScanTab = true
     }
 }
 

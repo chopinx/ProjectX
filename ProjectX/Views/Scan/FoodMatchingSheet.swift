@@ -148,33 +148,23 @@ private struct FoodSelectionRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(food.name)
-                            .font(.headline)
-                        if isSuggested {
-                            Text("Suggested")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.themePrimary.opacity(0.15))
-                                .foregroundStyle(Color.themePrimary)
-                                .clipShape(Capsule())
-                        }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(food.name).font(.headline)
+                        if isSuggested { CapsuleBadge(text: "Suggested", color: .themePrimary) }
                     }
                     if let nutrition = food.nutrition {
-                        Text("\(Int(nutrition.calories)) kcal/100g")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("\(Int(nutrition.calories)) kcal/100g").font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.themePrimary)
+                    Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(Color.themePrimary)
                 }
             }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
     }
 }

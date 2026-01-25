@@ -192,8 +192,47 @@ This simplifies nutrition calculations: `nutrition per 100g × (quantity_grams /
 **Settings:**
 - **LLM Provider:** OpenAI or Claude (Anthropic)
 - **API Key:** User enters their own API key (stored securely in Keychain)
+- **Family Nutrition Guide:** Launch guided setup for family targets
 - **iCloud Sync:** Toggle on/off
 - **About:** App version, privacy policy, credits
+
+---
+
+### F7: Family Nutrition Guide
+
+**Description:** A multi-step wizard that collects family member profiles and uses LLM to generate personalized daily nutrition targets for the household.
+
+**Family Member Profile:**
+- Name (e.g., "Dad", "Mom", "Emma")
+- Age (years)
+- Weight (kg)
+- Activity level (Sedentary, Lightly Active, Moderately Active, Active, Very Active)
+- Diet type (Standard, Vegetarian, Vegan, Keto/Low-Carb, Mediterranean, High Protein, Low Sodium)
+
+**Wizard Flow:**
+1. **Members Step:** Add/edit family members (name, age, weight)
+2. **Details Step:** For each member, set activity level and diet preference
+3. **Review Step:** Summary of all members and their profiles
+4. **Generate Step:** LLM analyzes profiles and suggests aggregated daily nutrition targets
+5. **Edit Step:** User can adjust the suggested targets before saving
+
+**LLM Suggestion:**
+- Input: All family member profiles (age, weight, activity, diet type)
+- Output: Recommended daily targets for the whole household:
+  - Calories, Protein, Carbohydrates, Fat, Sugar, Fiber, Sodium
+  - Brief explanation of the recommendation
+
+**User Capabilities:**
+- Add/remove/edit family members at any time
+- Re-run the guide to get fresh LLM suggestions
+- Manually override any suggested values
+- "Redo Guide" button to restart the wizard
+- "Get New Suggestion" button to regenerate LLM recommendation with current profiles
+
+**Data Storage:**
+- Family member profiles persisted in UserDefaults
+- Generated targets saved to existing `dailyNutritionTarget` in AppSettings
+- `hasCompletedFamilyGuide` flag tracks completion status
 
 ---
 
@@ -307,6 +346,36 @@ protocol NutritionEstimator {
 - other
 ```
 
+### FamilyMember
+```
+- id: UUID
+- name: String (e.g., "Dad", "Mom", "Emma")
+- age: Int (years)
+- weight: Double (kg)
+- activityLevel: ActivityLevel (enum)
+- dietType: DietType (enum)
+```
+
+### ActivityLevel (enum)
+```
+- sedentary
+- lightlyActive
+- moderatelyActive
+- active
+- veryActive
+```
+
+### DietType (enum)
+```
+- standard
+- vegetarian
+- vegan
+- keto
+- mediterranean
+- highProtein
+- lowSodium
+```
+
 ---
 
 ## User Interface
@@ -389,7 +458,7 @@ protocol NutritionEstimator {
 - Android version
 - Web dashboard
 - Multiple households
-- Dietary goal setting with alerts
+- Goal alerts/notifications (targets are set but no push alerts)
 - Integration with health apps (Apple Health)
 
 ---
@@ -419,3 +488,4 @@ protocol NutritionEstimator {
 | 2025-01-24 | 0.1 | Initial draft |
 | 2025-01-24 | 0.2 | Clarified unit standardization: all quantities stored in grams only. LLM converts kg/L/ml/pcs to grams. Removed unit field from PurchasedItem. |
 | 2025-01-24 | 0.3 | Added interface-first architecture section with key protocols (LLMService, ReceiptScanner, NutritionEstimator). Updated Vision framework role to OCR. |
+| 2025-01-25 | 0.4 | Added F7: Family Nutrition Guide - multi-step wizard for family member profiles with LLM-generated nutrition targets. Added FamilyMember, ActivityLevel, DietType data models. |

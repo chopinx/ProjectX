@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var showingImportError = false
     @State private var importErrorMessage = ""
     @State private var showingNutritionTargetSheet = false
+    @State private var showingFamilyGuide = false
 
     enum ValidationResult { case success, error(String) }
 
@@ -187,21 +188,41 @@ struct SettingsView: View {
 
     private var nutritionTargetSection: some View {
         Section {
+            Button { showingFamilyGuide = true } label: {
+                HStack {
+                    Label("Family Nutrition Guide", systemImage: "sparkles")
+                    Spacer()
+                    if settings.hasCompletedFamilyGuide {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.themeSuccess)
+                    } else {
+                        Text("Set Up").foregroundStyle(.secondary)
+                    }
+                }
+            }
             Button { showingNutritionTargetSheet = true } label: {
                 HStack {
-                    Label("Daily Nutrition Target", systemImage: "target")
+                    Label("Manual Target", systemImage: "slider.horizontal.3")
                     Spacer()
-                    Text("\(Int(settings.dailyNutritionTarget.calories)) kcal")
-                        .foregroundStyle(.secondary)
+                    Text("\(Int(settings.dailyNutritionTarget.calories)) kcal").foregroundStyle(.secondary)
+                }
+            }
+            if !settings.familyMembers.isEmpty {
+                HStack {
+                    Text("Family Members")
+                    Spacer()
+                    Text(settings.familyMembers.map(\.name).joined(separator: ", ")).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
         } header: {
             Text("Family Goals")
         } footer: {
-            Text("Set your family's daily nutrition targets to track progress in Analysis.")
+            Text("Use the guide for AI-powered targets based on your family, or set targets manually.")
         }
         .sheet(isPresented: $showingNutritionTargetSheet) {
             NutritionTargetSheet(target: $settings.dailyNutritionTarget)
+        }
+        .sheet(isPresented: $showingFamilyGuide) {
+            FamilyGuideView(settings: settings)
         }
     }
 
@@ -417,24 +438,31 @@ struct ShareSheet: UIViewControllerRepresentable {
 // MARK: - Nutrition Target Sheet
 
 private struct TargetFields {
-    var calories, protein, carbohydrates, fat, sugar, fiber, sodium: String
+    var protein, carbohydrates, fat, sugar, fiber, sodium: String
+
+    var calculatedCalories: Int {
+        let p = (Double(protein) ?? 0) * 4
+        let c = (Double(carbohydrates) ?? 0) * 4
+        let f = (Double(fat) ?? 0) * 9
+        return Int(p + c + f)
+    }
 
     init(from target: NutritionTarget) {
-        calories = String(Int(target.calories))
-        protein = String(Int(target.protein))
-        carbohydrates = String(Int(target.carbohydrates))
-        fat = String(Int(target.fat))
-        sugar = String(Int(target.sugar))
-        fiber = String(Int(target.fiber))
-        sodium = String(Int(target.sodium))
+        protein = String(Int(target.protein)); carbohydrates = String(Int(target.carbohydrates))
+        fat = String(Int(target.fat)); sugar = String(Int(target.sugar))
+        fiber = String(Int(target.fiber)); sodium = String(Int(target.sodium))
+    }
+
+    init(from level: ActivityLevel) {
+        let b = level.baseline
+        protein = "\(b.pro)"; carbohydrates = "\(b.carb)"; fat = "\(b.fat)"
+        sugar = "25"; fiber = "25"; sodium = "2300"
     }
 
     func toTarget() -> NutritionTarget {
-        NutritionTarget(
-            calories: Double(calories) ?? 2000, protein: Double(protein) ?? 50,
+        NutritionTarget(calories: Double(calculatedCalories), protein: Double(protein) ?? 50,
             carbohydrates: Double(carbohydrates) ?? 250, fat: Double(fat) ?? 65,
-            sugar: Double(sugar) ?? 50, fiber: Double(fiber) ?? 25, sodium: Double(sodium) ?? 2300
-        )
+            sugar: Double(sugar) ?? 50, fiber: Double(fiber) ?? 25, sodium: Double(sodium) ?? 2300)
     }
 }
 
@@ -442,6 +470,7 @@ struct NutritionTargetSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var target: NutritionTarget
     @State private var fields: TargetFields
+    @State private var activity: ActivityLevel = .moderate
 
     init(target: Binding<NutritionTarget>) {
         _target = target
@@ -452,19 +481,37 @@ struct NutritionTargetSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TargetRow(label: "Calories", value: $fields.calories, unit: "kcal")
-                    TargetRow(label: "Protein", value: $fields.protein, unit: "g")
-                    TargetRow(label: "Carbohydrates", value: $fields.carbohydrates, unit: "g")
-                    TargetRow(label: "Fat", value: $fields.fat, unit: "g")
-                } header: { Text("Daily Targets") } footer: { Text("Recommended daily intake for your family.") }
-
-                Section("Limits") {
-                    TargetRow(label: "Sugar", value: $fields.sugar, unit: "g")
-                    TargetRow(label: "Fiber", value: $fields.fiber, unit: "g")
-                    TargetRow(label: "Sodium", value: $fields.sodium, unit: "mg")
+                    Picker("Activity Level", selection: $activity) {
+                        ForEach(ActivityLevel.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Text(activity.description).font(.caption).foregroundStyle(.secondary)
+                    Button("Apply Baseline for 60kg Adult") { fields = TargetFields(from: activity) }
+                        .foregroundStyle(Color.themePrimary)
+                } header: { Text("Reference Baseline") } footer: {
+                    let b = activity.baseline
+                    Text("60kg adult: \(b.cal) kcal, \(b.pro)g protein, \(b.carb)g carbs, \(b.fat)g fat")
                 }
 
-                Section { Button("Reset to Defaults") { fields = TargetFields(from: .default) } }
+                Section {
+                    HStack {
+                        Text("Calories").fontWeight(.medium)
+                        Spacer()
+                        Text("\(fields.calculatedCalories)").foregroundStyle(.secondary).frame(width: 80, alignment: .trailing)
+                        Text("kcal").foregroundStyle(.tertiary).frame(width: 40, alignment: .leading)
+                    }
+                    .listRowBackground(Color(.secondarySystemBackground))
+                    TargetRow("Protein", $fields.protein, "g", hint: "4 kcal/g")
+                    TargetRow("Carbohydrates", $fields.carbohydrates, "g", hint: "4 kcal/g")
+                    TargetRow("Fat", $fields.fat, "g", hint: "9 kcal/g")
+                } header: { Text("Daily Macros") } footer: {
+                    Text("Calories = (Protein × 4) + (Carbs × 4) + (Fat × 9)")
+                }
+
+                Section("Daily Limits") {
+                    TargetRow("Sugar", $fields.sugar, "g")
+                    TargetRow("Fiber", $fields.fiber, "g")
+                    TargetRow("Sodium", $fields.sodium, "mg")
+                }
             }
             .navigationTitle("Nutrition Targets")
             .navigationBarTitleDisplayMode(.inline)
@@ -477,13 +524,19 @@ struct NutritionTargetSheet: View {
 }
 
 private struct TargetRow: View {
-    let label: String
+    let label: String, unit: String, hint: String?
     @Binding var value: String
-    let unit: String
+
+    init(_ label: String, _ value: Binding<String>, _ unit: String, hint: String? = nil) {
+        self.label = label; self._value = value; self.unit = unit; self.hint = hint
+    }
 
     var body: some View {
         HStack {
-            Text(label)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                if let hint { Text(hint).font(.caption2).foregroundStyle(.tertiary) }
+            }
             Spacer()
             TextField("0", text: $value).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 80)
             Text(unit).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)

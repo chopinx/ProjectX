@@ -35,8 +35,12 @@ final class Tag {
         ("Gray", "8E8E93")
     ]
 
+    // Special tag name for filtering in analysis
+    static let pantryStapleTagName = "Pantry Staple"
+
     // Default tags for new users
     static let defaultTags: [(name: String, colorHex: String)] = [
+        ("Pantry Staple", "8E8E93"), // Gray - for long-lasting items like salt, oil, spices
         ("Organic", "34C759"),       // Green
         ("Local", "5AC8FA"),         // Teal
         ("High Protein", "FF9500"),  // Orange

@@ -125,6 +125,72 @@ enum LLMPrompts {
         """
     }
 
+    // MARK: - Category and Tags Suggestion Prompt
+
+    static func suggestCategoryAndTagsPrompt(foodName: String, availableTags: [String]) -> String {
+        let tagList = availableTags.isEmpty ? "(none available)" : availableTags.joined(separator: ", ")
+        return """
+        Suggest the best category and tags for: "\(foodName)"
+
+        Available categories: vegetables, fruits, meat, seafood, dairy, grains, legumes, nutsSeeds, oils, snacks, beverages, other
+        Available subcategories by category:
+        - vegetables: leafy, root, cruciferous, squash, allium, peppers, mushrooms
+        - fruits: citrus, berries, tropical, stone, pome, melons
+        - meat: beef, pork, poultry, lamb, game
+        - seafood: fish, shellfish, crustacean
+        - dairy: milk, cheese, yogurt, butter, eggs
+        - grains: bread, pasta, rice, cereal, flour
+        - beverages: water, juice, soda, coffee, tea, alcohol
+
+        Available tags: \(tagList)
+
+        Required JSON structure:
+        {"category":"vegetables","subcategory":"leafy","tags":["tag1","tag2"]}
+
+        Field rules:
+        - category: one of the available categories (required)
+        - subcategory: one from the category's subcategories, or null if none fits
+        - tags: array of 0-3 most relevant tags from available tags list, empty array if none fit
+        \(strictOutputRules)
+        """
+    }
+
+    // MARK: - Nutrition Target Suggestion Prompt
+
+    static func suggestNutritionTargetsPrompt(members: [FamilyMember]) -> String {
+        let membersJSON = members.map { member in
+            """
+            {"name":"\(member.name)","age":\(member.age),"weight":\(member.weight),"activityLevel":"\(member.activityLevel.rawValue)","dietType":"\(member.dietType.rawValue)"}
+            """
+        }.joined(separator: ",")
+
+        return """
+        Calculate combined daily nutrition targets for this household based on family member profiles.
+
+        Family members:
+        [\(membersJSON)]
+
+        Consider each member's:
+        - Age and weight for base metabolic rate
+        - Activity level for calorie multiplier
+        - Diet type for macro ratio adjustments (e.g., keto = low carb/high fat, high protein = more protein)
+
+        Sum all members' individual needs into household totals.
+
+        Required JSON structure:
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"sugar":0,"fiber":0,"sodium":0,"explanation":"Brief explanation of the calculation"}
+
+        Field rules:
+        - calories: total daily kcal for entire household
+        - protein/carbohydrates/fat: grams per day for entire household
+        - sugar: recommended daily limit in grams (sum of individual limits)
+        - fiber: recommended daily intake in grams (sum of individual targets)
+        - sodium: recommended daily limit in mg (sum of individual limits, typically 2300mg per adult)
+        - explanation: 1-2 sentences explaining the key factors
+        \(strictOutputRules)
+        """
+    }
+
     // MARK: - Food Matching Prompt
 
     static func matchFoodPrompt(itemName: String, existingFoods: [String]) -> String {

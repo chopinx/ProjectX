@@ -43,6 +43,7 @@
 10. Tag system for food labeling (see [Features](features.md#tag-system))
 11. Default data management with restore functionality
 12. Data export/import (see [Features](features.md#data-exportimport))
+13. Family Nutrition Guide with LLM-generated targets (see [Features](features.md#family-nutrition-guide))
 
 ---
 
@@ -70,6 +71,10 @@
 | Restore default tags | Yes |
 | Export data (selective) | Yes |
 | Import data (selective) | Yes |
+| Family nutrition guide wizard | Yes |
+| Per-member profiles (age, weight, activity, diet) | Yes |
+| LLM-generated nutrition targets | Yes |
+| Redo guide / regenerate suggestions | Yes |
 
 ---
 
@@ -83,7 +88,8 @@ ProjectX/
 │   ├── GroceryTrip.swift
 │   ├── NutritionInfo.swift
 │   ├── NutritionSummary.swift
-│   └── FoodCategory.swift
+│   ├── FoodCategory.swift
+│   └── FamilyMember.swift
 ├── Services/
 │   ├── AppSettings.swift
 │   ├── LLMService.swift
@@ -101,6 +107,8 @@ ProjectX/
 │   ├── FoodBank/
 │   ├── Analysis/
 │   ├── Settings/
+│   │   ├── SettingsView.swift
+│   │   └── FamilyGuideView.swift
 │   └── Components/
 ├── ProjectXApp.swift
 └── ContentView.swift

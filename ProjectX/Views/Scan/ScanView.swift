@@ -4,7 +4,10 @@ import UniformTypeIdentifiers
 
 struct ScanView: View {
     var settings: AppSettings
+    var initialMode: ScanType? = nil
+    var onDismiss: (() -> Void)? = nil
     @Environment(\.scanFlowManager) private var flowManager
+    @Environment(\.dismiss) private var dismiss
 
     @State private var showCamera = false
     @State private var showPhotoPicker = false
@@ -36,6 +39,14 @@ struct ScanView: View {
                 if isProcessingOCR { ocrProcessingOverlay }
             }
             .navigationTitle("Scan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { onDismiss?() ?? dismiss() } label: {
+                        Image(systemName: "xmark").fontWeight(.medium)
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraView(sourceType: .camera, onImageCaptured: handleImageCaptured, onCancel: { showCamera = false }).ignoresSafeArea()
             }
@@ -49,7 +60,14 @@ struct ScanView: View {
                 TextInputSheet(text: $receiptText, title: "Enter Text", placeholder: "Paste or type your receipt/label text below",
                     example: "Example:\nApples 1kg 2.99\nMilk 1L 1.49\nBread 500g 2.29", buttonTitle: "Continue") {
                     showTextInput = false
-                    if !receiptText.isEmpty { pendingOCRText = receiptText; flowManager.showScanTypeSelection = true }
+                    guard !receiptText.isEmpty else { return }
+                    pendingOCRText = receiptText
+                    if let mode = initialMode {
+                        if mode == .receipt { flowManager.startReceiptReview(text: receiptText, settings: settings) }
+                        else { flowManager.startNutritionReview(text: receiptText) }
+                    } else {
+                        flowManager.showScanTypeSelection = true
+                    }
                 }
             }
             .sheet(isPresented: Binding(get: { flowManager.showScanTypeSelection }, set: { flowManager.showScanTypeSelection = $0 })) {
@@ -139,8 +157,14 @@ struct ScanView: View {
         isProcessingOCR = true
         defer { isProcessingOCR = false }
         do {
-            pendingOCRText = try await ImportManager().processImport(source)
-            flowManager.showScanTypeSelection = true
+            let text = try await ImportManager().processImport(source)
+            pendingOCRText = text
+            if let mode = initialMode {
+                if mode == .receipt { flowManager.startReceiptReview(text: text, settings: settings) }
+                else { flowManager.startNutritionReview(text: text) }
+            } else {
+                flowManager.showScanTypeSelection = true
+            }
         } catch { errorMessage = "Failed to extract text: \(error.localizedDescription)" }
     }
 }
@@ -157,17 +181,7 @@ struct ScanTypeSelectionSheet: View {
                 Text("What would you like to extract?").font(.headline).padding(.top)
                 VStack(spacing: 16) {
                     ForEach(ScanView.ScanType.allCases) { type in
-                        Button { onSelect(type) } label: {
-                            HStack(spacing: 16) {
-                                Image(systemName: type.icon).font(.title2).frame(width: 40)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(type.rawValue).font(.headline)
-                                    Text(type.description).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                            }.padding().background(Color(.secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 12))
-                        }.buttonStyle(.plain)
+                        ScanTypeButton(type: type, onSelect: onSelect)
                     }
                 }.padding(.horizontal)
                 Spacer()
@@ -176,5 +190,30 @@ struct ScanTypeSelectionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onCancel) } }
         }
+    }
+}
+
+private struct ScanTypeButton: View {
+    let type: ScanView.ScanType
+    let onSelect: (ScanView.ScanType) -> Void
+
+    var body: some View {
+        Button { onSelect(type) } label: {
+            HStack(spacing: 16) {
+                Image(systemName: type.icon).font(.title2).frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(type.rawValue).font(.headline)
+                    Text(type.description).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+            }
+            .padding()
+            .frame(minHeight: 70)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.pressFeedback)
     }
 }
