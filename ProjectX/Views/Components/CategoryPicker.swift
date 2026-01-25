@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct CategoryPicker: View {
     @Binding var selection: FoodCategory
@@ -72,6 +73,12 @@ private struct SubcategoryList: View {
     @Binding var selection: FoodCategory
     let dismiss: () -> Void
 
+    @Query(sort: \CustomSubcategory.name) private var allCustomSubs: [CustomSubcategory]
+
+    private var customSubcategories: [CustomSubcategory] {
+        allCustomSubs.filter { $0.mainCategoryRaw == mainCategory.rawValue }
+    }
+
     var body: some View {
         List {
             // Option to select main category only (no subcategory)
@@ -91,7 +98,7 @@ private struct SubcategoryList: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if selection.main == mainCategory && selection.sub == nil {
+                        if selection.main == mainCategory && selection.sub == nil && selection.customSub == nil {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(Color.themePrimary)
                         }
@@ -100,7 +107,7 @@ private struct SubcategoryList: View {
                 .buttonStyle(.plain)
             }
 
-            // Subcategories
+            // Built-in subcategories
             if !mainCategory.subcategories.isEmpty {
                 Section("Subcategories") {
                     ForEach(mainCategory.subcategories) { sub in
@@ -112,6 +119,28 @@ private struct SubcategoryList: View {
                                 Text(sub.displayName)
                                 Spacer()
                                 if selection.main == mainCategory && selection.sub == sub {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.themePrimary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // Custom subcategories
+            if !customSubcategories.isEmpty {
+                Section("Custom") {
+                    ForEach(customSubcategories) { custom in
+                        Button {
+                            selection = FoodCategory(main: mainCategory, customSub: custom.name)
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(custom.name)
+                                Spacer()
+                                if selection.main == mainCategory && selection.customSub == custom.name {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(Color.themePrimary)
                                 }

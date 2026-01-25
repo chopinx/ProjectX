@@ -176,7 +176,7 @@ struct ReceiptReviewView: View {
                         else { selectedIds = Set(vm.extractedItems.map(\.id)) }
                     }.font(.caption)
                     Button("Delete") { showDeleteSelected = true }
-                        .font(.caption).foregroundStyle(.red).disabled(selectedIds.isEmpty)
+                        .font(.caption).foregroundStyle(Color.themeError).disabled(selectedIds.isEmpty)
                     Button("Done") { isSelecting = false; selectedIds.removeAll() }.font(.caption)
                 } else {
                     Text("\(vm.extractedItems.count)").font(.caption).foregroundStyle(.secondary)

@@ -151,7 +151,7 @@ private struct FoodSelectionRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text(food.name).font(.headline)
-                        if isSuggested { CapsuleBadge(text: "Suggested", color: .themePrimary) }
+                        if isSuggested { CapsuleBadge(text: "Suggested", color: Color.themePrimary) }
                     }
                     if let nutrition = food.nutrition {
                         Text("\(Int(nutrition.calories)) kcal/100g").font(.subheadline).foregroundStyle(.secondary)

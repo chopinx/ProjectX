@@ -34,19 +34,19 @@ extension Color {
     static let themeTextSecondary = Color(hex: "64748B")!
     static let themeTextTertiary = Color(hex: "94A3B8")!
 
-    // MARK: - Category Colors (for food categories)
-    static let categoryVegetables = Color(hex: "22C55E")!  // Green
-    static let categoryFruits = Color(hex: "F97316")!      // Orange
-    static let categoryMeat = Color(hex: "EF4444")!        // Red
-    static let categorySeafood = Color(hex: "0EA5E9")!     // Blue
-    static let categoryDairy = Color(hex: "FBBF24")!       // Yellow
-    static let categoryGrains = Color(hex: "D97706")!      // Amber
-    static let categoryLegumes = Color(hex: "84CC16")!     // Lime
-    static let categoryNuts = Color(hex: "A16207")!        // Brown
-    static let categoryOils = Color(hex: "FACC15")!        // Gold
-    static let categorySnacks = Color(hex: "EC4899")!      // Pink
-    static let categoryBeverages = Color(hex: "06B6D4")!   // Cyan
-    static let categoryOther = Color(hex: "6B7280")!       // Gray
+    // MARK: - Category Colors (for food categories - diet focused)
+    static let categoryProteins = Color(hex: "EF4444")!    // Red - protein/meat
+    static let categoryVegetables = Color(hex: "22C55E")!  // Green - fresh produce
+    static let categoryFruits = Color(hex: "F97316")!      // Orange - natural/fruit
+    static let categoryDairy = Color(hex: "FBBF24")!       // Yellow - dairy
+    static let categoryGrains = Color(hex: "D97706")!      // Amber - grains/carbs
+    static let categoryLegumes = Color(hex: "84CC16")!     // Lime - plant protein
+    static let categoryHealthyFats = Color(hex: "A16207")! // Brown - nuts/oils
+    static let categoryBeverages = Color(hex: "06B6D4")!   // Cyan - drinks
+    static let categoryTreats = Color(hex: "EC4899")!      // Pink - sweets
+    static let categoryCondiments = Color(hex: "F59E0B")!  // Amber - spices
+    static let categoryPrepared = Color(hex: "8B5CF6")!    // Purple - convenience
+    static let categoryOther = Color(hex: "6B7280")!       // Gray - misc
 
     // MARK: - Nutrition Colors
     static let nutritionCalories = Color(hex: "F97316")!   // Orange
@@ -72,17 +72,17 @@ extension Color {
 extension FoodMainCategory {
     var themeColor: Color {
         switch self {
+        case .proteins: return .categoryProteins
         case .vegetables: return .categoryVegetables
         case .fruits: return .categoryFruits
-        case .meat: return .categoryMeat
-        case .seafood: return .categorySeafood
         case .dairy: return .categoryDairy
         case .grains: return .categoryGrains
         case .legumes: return .categoryLegumes
-        case .nutsSeeds: return .categoryNuts
-        case .oils: return .categoryOils
-        case .snacks: return .categorySnacks
+        case .healthyFats: return .categoryHealthyFats
         case .beverages: return .categoryBeverages
+        case .treats: return .categoryTreats
+        case .condiments: return .categoryCondiments
+        case .prepared: return .categoryPrepared
         case .other: return .categoryOther
         }
     }

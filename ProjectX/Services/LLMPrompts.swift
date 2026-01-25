@@ -4,6 +4,21 @@ import Foundation
 /// All prompts enforce strict JSON-only output for reliable parsing
 enum LLMPrompts {
 
+    // MARK: - Dynamic Category Generation
+
+    /// Generate category list from FoodMainCategory enum
+    private static var categoryList: String {
+        FoodMainCategory.allCases.map(\.rawValue).joined(separator: "/")
+    }
+
+    /// Generate full category and subcategory mapping from enums
+    private static var categorySubcategoryMapping: String {
+        FoodMainCategory.allCases.map { main in
+            let subs = main.subcategories.map(\.rawValue).joined(separator: ", ")
+            return "- \(main.rawValue): \(subs.isEmpty ? "(no subcategories)" : subs)"
+        }.joined(separator: "\n        ")
+    }
+
     // MARK: - Strict Output Instructions (appended to all prompts)
 
     private static let strictOutputRules = """
@@ -38,28 +53,36 @@ enum LLMPrompts {
         - Any items labeled for infants, babies, or toddlers
         """
 
-    static func foodOnlyRule(filterBabyFood: Bool) -> String {
-        var rule = foodOnlyRule
-        if filterBabyFood { rule += "\n" + babyFoodFilter }
-        return rule
+    private static func buildFoodOnlyRule(filterBabyFood: Bool) -> String {
+        filterBabyFood ? foodOnlyRule + "\n" + babyFoodFilter : foodOnlyRule
     }
+
+    private static let receiptFieldRules = """
+        - name: translate to English if needed
+        - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
+        - price: number without currency symbol
+        """
+
+    private static let receiptJSON = """
+        {"store_name":"Store Name","receipt_date":"2025-01-25","items":[{"name":"Food name","quantity_grams":1000,"price":2.99,"category":"proteins","subcategory":"leanMeat"}]}
+        """
 
     static func receiptImagePrompt(filterBabyFood: Bool) -> String {
         """
         Extract store name, date, and ONLY food items from this grocery receipt image.
 
-        \(foodOnlyRule(filterBabyFood: filterBabyFood))
+        \(buildFoodOnlyRule(filterBabyFood: filterBabyFood))
 
         Required JSON structure:
-        {"store_name":"Store Name","receipt_date":"2025-01-25","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
+        \(receiptJSON)
 
         Field rules:
         - store_name: string or null if not visible
-        - receipt_date: date in YYYY-MM-DD format, or null if not visible
-        - name: translate to English if needed
-        - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
-        - price: number without currency symbol
-        - category: one of produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other
+        - receipt_date: YYYY-MM-DD format, or null
+        \(receiptFieldRules)
+        - category: one of \(categoryList)
+        - subcategory: from category's list:
+        \(categorySubcategoryMapping)
         \(strictOutputRules)
         """
     }
@@ -68,38 +91,43 @@ enum LLMPrompts {
         """
         Extract store name, date, and ONLY food items from this receipt text.
 
-        \(foodOnlyRule(filterBabyFood: filterBabyFood))
+        \(buildFoodOnlyRule(filterBabyFood: filterBabyFood))
 
         Receipt text:
         \(text)
 
         Required JSON structure:
-        {"store_name":"Store Name","receipt_date":"2025-01-25","items":[{"name":"Food name in English","quantity_grams":1000,"price":2.99,"category":"produce"}]}
+        \(receiptJSON)
 
         Field rules:
         - store_name: string or null if not found
-        - receipt_date: date in YYYY-MM-DD format, or null if not found
-        - name: translate to English if needed
-        - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
-        - price: number without currency symbol
-        - category: one of produce/dairy/meat/seafood/bakery/beverages/snacks/frozen/pantry/other
+        - receipt_date: YYYY-MM-DD format, or null
+        \(receiptFieldRules)
+        - category: one of \(categoryList)
+        - subcategory: from category's list:
+        \(categorySubcategoryMapping)
         \(strictOutputRules)
         """
     }
 
-    // MARK: - Nutrition Label Prompts
+    // MARK: - Nutrition Prompts
+
+    private static let nutritionJSON = """
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
+        """
+
+    private static let nutritionFieldRules = """
+        - All values per 100g (macros in grams, calories in kcal, sodium in mg)
+        - Use 0 for missing values
+        """
 
     static let nutritionLabelImagePrompt = """
         Extract nutrition values from this nutrition label image. Convert to per 100g.
 
         Required JSON structure:
-        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
+        \(nutritionJSON)
 
-        Field rules:
-        - All macros in grams per 100g
-        - calories: kcal per 100g
-        - sodium: mg per 100g
-        - Use 0 for missing values, estimate if possible
+        \(nutritionFieldRules)
         \(strictOutputRules)
         """
 
@@ -111,31 +139,21 @@ enum LLMPrompts {
         \(text)
 
         Required JSON structure:
-        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
+        \(nutritionJSON)
 
-        Field rules:
-        - All macros in grams per 100g
-        - calories: kcal per 100g
-        - sodium: mg per 100g
-        - Use 0 for missing values
+        \(nutritionFieldRules)
         \(strictOutputRules)
         """
     }
 
-    // MARK: - Nutrition Estimation Prompt
-
     static func estimateNutritionPrompt(foodName: String, category: String) -> String {
         """
-        Estimate nutrition values for: \(foodName) (category: \(category))
+        Estimate typical nutrition values for: \(foodName) (category: \(category))
 
         Required JSON structure:
-        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
+        \(nutritionJSON)
 
-        Field rules:
-        - All values per 100g based on typical values for this food
-        - calories: kcal
-        - protein/carbohydrates/fat/saturatedFat/sugar/fiber: grams
-        - sodium: mg
+        \(nutritionFieldRules)
         \(strictOutputRules)
         """
     }
@@ -145,33 +163,24 @@ enum LLMPrompts {
     static func suggestCategoryAndTagsPrompt(foodName: String, availableTags: [String]) -> String {
         let tagList = availableTags.isEmpty ? "(none available)" : availableTags.joined(separator: ", ")
         return """
-        Suggest the best category and subcategory for: "\(foodName)"
+        Suggest the best category, subcategory, and up to 3 most relevant tags for: "\(foodName)"
 
-        IMPORTANT: Always provide a specific subcategory when possible. The subcategory is the most important classification.
+        IMPORTANT:
+        1. Always provide BOTH category AND subcategory - the 2-level classification is required
+        2. Select up to 3 tags that best describe this food item
 
-        Available categories and their subcategories:
-        - vegetables: leafy, root, cruciferous, squash, allium, peppers, mushrooms
-        - fruits: citrus, berries, tropical, stone, pome, melons
-        - meat: beef, pork, poultry, lamb, game
-        - seafood: fish, shellfish, crustacean
-        - dairy: milk, cheese, yogurt, butter, eggs
-        - grains: bread, pasta, rice, cereal, flour
-        - legumes: (no subcategories)
-        - nutsSeeds: (no subcategories)
-        - oils: (no subcategories)
-        - snacks: (no subcategories)
-        - beverages: water, juice, soda, coffee, tea, alcohol
-        - other: (no subcategories)
+        Available categories and their subcategories (use rawValue format):
+        \(categorySubcategoryMapping)
 
         Available tags: \(tagList)
 
         Required JSON structure:
-        {"category":"vegetables","subcategory":"leafy","tags":["tag1","tag2"]}
+        {"category":"proteins","subcategory":"leanMeat","tags":["tag1","tag2","tag3"]}
 
         Field rules:
-        - category: one of the available categories (required)
-        - subcategory: MUST provide one from the category's subcategories list above. Only use null if the category has no subcategories listed.
-        - tags: array of 0-3 most relevant tags from available tags list, empty array if none fit
+        - category: one of \(categoryList) (required)
+        - subcategory: MUST provide one from the category's subcategories list (required)
+        - tags: up to 3 most relevant tags from the available list, empty array if none fit
         \(strictOutputRules)
         """
     }

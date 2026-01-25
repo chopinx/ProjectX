@@ -75,7 +75,7 @@ struct ErrorStateView: View {
             if let retry = retryAction {
                 Button("Try Again", action: retry)
                     .buttonStyle(.borderedProminent)
-                    .tint(.themePrimary)
+                    .tint(Color.themePrimary)
             }
         }
     }

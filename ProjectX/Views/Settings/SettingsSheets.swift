@@ -32,7 +32,7 @@ struct ExportDataSheet: View {
                     }
                 }
                 if let error = errorMessage {
-                    Section { Text(error).foregroundStyle(.red) }
+                    Section { Text(error).foregroundStyle(Color.themeError) }
                 }
             }
             .navigationTitle("Export Data")
@@ -101,7 +101,7 @@ struct ImportDataSheet: View {
                 }
                 Section { Text("Existing items with the same name will be replaced.").font(.caption).foregroundStyle(.secondary) }
                 if let error = errorMessage {
-                    Section { Text(error).foregroundStyle(.red) }
+                    Section { Text(error).foregroundStyle(Color.themeError) }
                 }
             }
             .navigationTitle("Import Data")

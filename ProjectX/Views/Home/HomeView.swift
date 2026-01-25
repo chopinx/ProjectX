@@ -8,9 +8,12 @@ struct HomeView: View {
 
     @State private var showingNewTrip = false
     @State private var showingAddOptions = false
-    @State private var showDeleteAlert = false
-    @State private var pendingDeleteTrip: GroceryTrip?
-    @State private var pendingDeleteMessage = ""
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }()
 
     var body: some View {
         NavigationStack {
@@ -28,15 +31,11 @@ struct HomeView: View {
                         } label: {
                             TripRow(trip: trip, title: tripTitle(for: trip))
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
-                                // Cache everything needed for the alert
-                                let message = "This will permanently delete \"\(tripTitle(for: trip))\" and all its items."
-                                // Delay to let swipe animation fully complete
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    pendingDeleteTrip = trip
-                                    pendingDeleteMessage = message
-                                    showDeleteAlert = true
+                                withAnimation {
+                                    context.delete(trip)
+                                    try? context.save()
                                 }
                             } label: {
                                 Label("Delete", systemImage: "trash")
@@ -63,29 +62,11 @@ struct HomeView: View {
             .sheet(isPresented: $showingNewTrip) {
                 NavigationStack { TripDetailView(trip: nil) }
             }
-            .alert("Delete Trip?", isPresented: $showDeleteAlert) {
-                Button("Cancel", role: .cancel) {
-                    pendingDeleteTrip = nil
-                }
-                Button("Delete", role: .destructive) {
-                    if let trip = pendingDeleteTrip {
-                        pendingDeleteTrip = nil
-                        withAnimation {
-                            context.delete(trip)
-                            try? context.save()
-                        }
-                    }
-                }
-            } message: {
-                Text(pendingDeleteMessage)
-            }
         }
     }
 
     private func tripTitle(for trip: GroceryTrip) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        let dateStr = formatter.string(from: trip.date)
+        let dateStr = Self.dateFormatter.string(from: trip.date)
         if let store = trip.storeName, !store.isEmpty {
             return "\(store) - \(dateStr)"
         }

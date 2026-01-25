@@ -106,7 +106,7 @@ struct SettingsView: View {
         } footer: {
             if !settings.currentModel.supportsVision {
                 Label("This model does not support image scanning", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.themeWarning)
             }
         }
     }

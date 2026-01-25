@@ -113,16 +113,16 @@ struct ScanView: View {
             VStack(spacing: 12) {
                 Button { showCamera = true } label: { Label("Take Photo", systemImage: "camera.fill").frame(maxWidth: .infinity) }
                     .buttonStyle(.borderedProminent)
-                    .tint(.themePrimary)
+                    .tint(Color.themePrimary)
                 Button { showPhotoPicker = true } label: { Label("Choose from Library", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity) }
                     .buttonStyle(.bordered)
-                    .tint(.themePrimary)
+                    .tint(Color.themePrimary)
                 Button { showDocumentPicker = true } label: { Label("Import PDF or Image", systemImage: "doc.badge.plus").frame(maxWidth: .infinity) }
                     .buttonStyle(.bordered)
-                    .tint(.themePrimary)
+                    .tint(Color.themePrimary)
                 Button { receiptText = ""; showTextInput = true } label: { Label("Enter Text", systemImage: "text.alignleft").frame(maxWidth: .infinity) }
                     .buttonStyle(.bordered)
-                    .tint(.themePrimary)
+                    .tint(Color.themePrimary)
             }.padding(.horizontal, 48)
         }
     }

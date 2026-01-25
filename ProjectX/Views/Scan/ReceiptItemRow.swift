@@ -18,19 +18,19 @@ struct ReceiptItemRow: View {
             }
 
             if let f = linked {
-                Badge(icon: "checkmark.circle.fill", text: f.name, color: .themeSuccess)
+                Badge(icon: "checkmark.circle.fill", text: f.name, color: Color.themeSuccess)
             } else if let s = suggested {
                 HStack(spacing: 8) {
-                    Badge(icon: "sparkles", text: "\(s.food.name) (\(Int(s.confidence * 100))%)", color: .themeWarning)
-                    Button(action: onConfirm) { Image(systemName: "checkmark").font(.caption.bold()) }.buttonStyle(.bordered).controlSize(.small).tint(.themeSuccess)
+                    Badge(icon: "sparkles", text: "\(s.food.name) (\(Int(s.confidence * 100))%)", color: Color.themeWarning)
+                    Button(action: onConfirm) { Image(systemName: "checkmark").font(.caption.bold()) }.buttonStyle(.bordered).controlSize(.small).tint(Color.themeSuccess)
                     Button(action: onDismiss) { Image(systemName: "xmark").font(.caption.bold()) }.buttonStyle(.bordered).controlSize(.small).tint(.secondary)
                 }
             }
 
             HStack(spacing: 8) {
                 Spacer()
-                Button(action: onEdit) { Label("Edit", systemImage: "pencil").font(.subheadline) }.buttonStyle(.bordered).tint(.themeInfo)
-                Button(action: onMatch) { Label(linked == nil ? "Link" : "Change", systemImage: "fork.knife").font(.subheadline) }.buttonStyle(.bordered).tint(linked == nil ? .themePrimary : .themeSecondary)
+                Button(action: onEdit) { Label("Edit", systemImage: "pencil").font(.subheadline) }.buttonStyle(.bordered).tint(Color.themeInfo)
+                Button(action: onMatch) { Label(linked == nil ? "Link" : "Change", systemImage: "fork.knife").font(.subheadline) }.buttonStyle(.bordered).tint(linked == nil ? Color.themePrimary : Color.themeSecondary)
             }
         }
         .padding(.vertical, 4)

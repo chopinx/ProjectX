@@ -18,15 +18,16 @@ enum ItemSortOption: String, CaseIterable, Identifiable {
         }
     }
 
-    func value(for item: PurchasedItem) -> Double {
+    func numericValue(for item: PurchasedItem) -> Double {
+        let nutrition = item.calculatedNutrition
         switch self {
-        case .name: 0 // handled separately
-        case .calories: item.calculatedNutrition?.calories ?? 0
-        case .protein: item.calculatedNutrition?.protein ?? 0
-        case .carbs: item.calculatedNutrition?.carbohydrates ?? 0
-        case .fat: item.calculatedNutrition?.fat ?? 0
-        case .sugar: item.calculatedNutrition?.sugar ?? 0
-        case .price: item.price
+        case .name: fatalError("Use name sorting directly")
+        case .calories: return nutrition?.calories ?? 0
+        case .protein: return nutrition?.protein ?? 0
+        case .carbs: return nutrition?.carbohydrates ?? 0
+        case .fat: return nutrition?.fat ?? 0
+        case .sugar: return nutrition?.sugar ?? 0
+        case .price: return item.price
         }
     }
 }
@@ -45,15 +46,17 @@ struct TripDetailView: View {
     @State private var showingSaveError = false
     @State private var sortOption: ItemSortOption = .name
     @State private var sortAscending = true
-    @State private var itemToDelete: PurchasedItem?
 
     private var existingTrip: GroceryTrip?
     private var isNewTrip: Bool { existingTrip == nil }
 
     private var sortedItems: [PurchasedItem] {
-        let sorted = sortOption == .name
-            ? items.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
-            : items.sorted { sortOption.value(for: $0) < sortOption.value(for: $1) }
+        let sorted: [PurchasedItem]
+        if sortOption == .name {
+            sorted = items.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        } else {
+            sorted = items.sorted { sortOption.numericValue(for: $0) < sortOption.numericValue(for: $1) }
+        }
         return sortAscending ? sorted : sorted.reversed()
     }
 
@@ -86,8 +89,13 @@ struct TripDetailView: View {
                     ForEach(sortedItems) { item in
                         Button { editingItem = item } label: { ItemRow(item: item) }
                             .buttonStyle(.plain)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) { DispatchQueue.main.async { itemToDelete = item } } label: {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    if let index = items.firstIndex(where: { $0.id == item.id }) {
+                                        if item.trip != nil { deletedItems.append(item) }
+                                        _ = withAnimation { items.remove(at: index) }
+                                    }
+                                } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
@@ -95,7 +103,7 @@ struct TripDetailView: View {
                 }
                 Button { showingAddItem = true } label: {
                     Label("Add Item", systemImage: "plus.circle")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.themePrimary)
                 }
             } header: {
                 HStack {
@@ -122,7 +130,7 @@ struct TripDetailView: View {
                                 Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
                             }
                             .font(.caption)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.themePrimary)
                         }
                     }
                 }
@@ -160,14 +168,6 @@ struct TripDetailView: View {
             Button("OK") {}
         } message: {
             Text("Failed to save changes. Please try again.")
-        }
-        .deleteConfirmation("Delete Item?", item: $itemToDelete, message: { item in
-            "Remove \"\(item.name)\" from this trip?"
-        }) { item in
-            if let index = items.firstIndex(where: { $0.id == item.id }) {
-                if item.trip != nil { deletedItems.append(item) }
-                _ = withAnimation { items.remove(at: index) }
-            }
         }
     }
 

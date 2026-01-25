@@ -7,10 +7,12 @@ struct FoodBankView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Food.name) private var foods: [Food]
     @Query(sort: \Tag.name) private var allTags: [Tag]
+    @Query(sort: \CustomSubcategory.name) private var allCustomSubs: [CustomSubcategory]
 
     @State private var searchText = ""
     @AppStorage("foodBankCategory") private var selectedCategoryRaw: String?
     @State private var selectedSubcategory: FoodSubcategory?
+    @State private var selectedCustomSub: String?
     @State private var selectedTag: Tag?
     @State private var showingAddFood = false
     @State private var showingAddOptions = false
@@ -30,14 +32,28 @@ struct FoodBankView: View {
     private func selectCategory(_ category: FoodMainCategory?) {
         selectedCategoryRaw = category?.rawValue
         selectedSubcategory = nil
+        selectedCustomSub = nil
+    }
+
+    private var customSubcategoriesForSelected: [CustomSubcategory] {
+        guard let cat = selectedMainCategory else { return [] }
+        return allCustomSubs.filter { $0.mainCategoryRaw == cat.rawValue }
     }
 
     private var filteredFoods: [Food] {
         foods.filter { food in
-            (selectedMainCategory == nil || food.category.main == selectedMainCategory) &&
-            (selectedSubcategory == nil || food.category.sub == selectedSubcategory) &&
-            (selectedTag == nil || food.tags.contains { $0.id == selectedTag?.id }) &&
-            (searchText.isEmpty || food.name.localizedCaseInsensitiveContains(searchText))
+            let categoryMatch = selectedMainCategory == nil || food.category.main == selectedMainCategory
+            let subMatch: Bool
+            if selectedSubcategory != nil {
+                subMatch = food.category.sub == selectedSubcategory
+            } else if selectedCustomSub != nil {
+                subMatch = food.category.customSub == selectedCustomSub
+            } else {
+                subMatch = true
+            }
+            let tagMatch = selectedTag == nil || food.tags.contains { $0.id == selectedTag?.id }
+            let searchMatch = searchText.isEmpty || food.name.localizedCaseInsensitiveContains(searchText)
+            return categoryMatch && subMatch && tagMatch && searchMatch
         }
     }
 
@@ -124,14 +140,22 @@ struct FoodBankView: View {
 
     private var contentArea: some View {
         VStack(spacing: 0) {
-            if let cat = selectedMainCategory, !cat.subcategories.isEmpty {
+            if let cat = selectedMainCategory, (!cat.subcategories.isEmpty || !customSubcategoriesForSelected.isEmpty) {
                 filterBar {
-                    FilterChip("All", isSelected: selectedSubcategory == nil, color: cat.themeColor) {
+                    FilterChip("All", isSelected: selectedSubcategory == nil && selectedCustomSub == nil, color: cat.themeColor) {
                         selectedSubcategory = nil
+                        selectedCustomSub = nil
                     }
                     ForEach(cat.subcategories) { sub in
                         FilterChip(sub.displayName, isSelected: selectedSubcategory == sub, color: cat.themeColor) {
                             selectedSubcategory = sub
+                            selectedCustomSub = nil
+                        }
+                    }
+                    ForEach(customSubcategoriesForSelected) { custom in
+                        FilterChip(custom.name, isSelected: selectedCustomSub == custom.name, color: cat.themeColor) {
+                            selectedCustomSub = custom.name
+                            selectedSubcategory = nil
                         }
                     }
                 }
@@ -348,7 +372,7 @@ private struct FoodRow: View {
                 Text(food.name).font(.headline)
                 HStack(spacing: 8) {
                     if let n = food.nutrition { Text("\(Int(n.calories)) kcal").font(.caption).foregroundStyle(.secondary) }
-                    if food.category.sub != nil { CapsuleBadge(text: food.category.displayName) }
+                    if food.category.hasSubcategory { CapsuleBadge(text: food.category.displayName) }
                 }
                 if !food.tags.isEmpty {
                     HStack(spacing: 4) {

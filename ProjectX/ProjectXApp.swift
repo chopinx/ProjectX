@@ -20,7 +20,8 @@ struct ProjectXApp: App {
             NutritionInfo.self,
             GroceryTrip.self,
             PurchasedItem.self,
-            Tag.self
+            Tag.self,
+            CustomSubcategory.self
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

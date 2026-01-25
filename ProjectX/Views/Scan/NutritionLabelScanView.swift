@@ -65,13 +65,13 @@ struct NutritionLabelScanView: View {
             VStack(spacing: 12) {
                 Button { showCamera = true } label: {
                     Label("Take Photo", systemImage: "camera.fill").frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent).tint(.themePrimary)
+                }.buttonStyle(.borderedProminent).tint(Color.themePrimary)
                 Button { showPhotoPicker = true } label: {
                     Label("Choose from Library", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity)
-                }.buttonStyle(.bordered).tint(.themePrimary)
+                }.buttonStyle(.bordered).tint(Color.themePrimary)
                 Button { labelText = ""; showTextInput = true } label: {
                     Label("Enter Text", systemImage: "text.alignleft").frame(maxWidth: .infinity)
-                }.buttonStyle(.bordered).tint(.themePrimary)
+                }.buttonStyle(.bordered).tint(Color.themePrimary)
             }.padding(.horizontal, 24)
             Spacer()
         }
@@ -83,10 +83,10 @@ struct NutritionLabelScanView: View {
             ErrorStateView("Extraction Failed", message: message, retryAction: nil)
             HStack(spacing: 16) {
                 Button("Try Again") { capturedImage = nil; labelText = ""; errorMessage = nil }
-                    .buttonStyle(.bordered).tint(.themePrimary)
+                    .buttonStyle(.bordered).tint(Color.themePrimary)
                 if capturedImage != nil {
                     Button("Retry") { errorMessage = nil; Task { await extractFromImage() } }
-                        .buttonStyle(.borderedProminent).tint(.themePrimary)
+                        .buttonStyle(.borderedProminent).tint(Color.themePrimary)
                 }
             }
             .padding(.top, 8)

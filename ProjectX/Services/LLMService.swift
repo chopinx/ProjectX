@@ -32,12 +32,14 @@ struct ExtractedReceiptItem: Codable, Identifiable {
     var quantityGrams: Double  // Always in grams - LLM converts all units
     var price: Double
     var category: String
+    var subcategory: String?
 
     enum CodingKeys: String, CodingKey {
         case name
         case quantityGrams = "quantity_grams"
         case price
         case category
+        case subcategory
     }
 }
 
