@@ -136,7 +136,7 @@ struct FoodDetailView: View {
     private func estimateNutrition() async {
         await runAIOperation(setLoading: { isAIEstimatingNutrition = $0 }) { service in
             let result = try await service.estimateNutrition(for: name, category: category.displayName)
-            nutrition.populate(from: result)
+            nutrition.populate(from: result, source: .aiEstimate)
         }
     }
 

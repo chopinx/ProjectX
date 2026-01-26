@@ -175,12 +175,14 @@ struct FoodBankView: View {
     }
 
     private var batchActionBar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Button { toggleSelectAll() } label: {
-                Text(selectedFoodIds.count == filteredFoods.count ? "Deselect All" : "Select All").font(.subheadline)
+                Image(systemName: selectedFoodIds.count == filteredFoods.count ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
             }
-            Spacer()
-            Text("\(selectedFoodIds.count) selected").font(.caption).foregroundStyle(.secondary)
+            Text("\(selectedFoodIds.count) selected")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             Spacer()
             Menu {
                 Button { Task { await batchAISuggestCategory() } } label: {
@@ -194,10 +196,13 @@ struct FoodBankView: View {
                     Label("Delete", systemImage: "trash")
                 }.disabled(selectedFoodIds.isEmpty)
             } label: {
-                Label("Actions", systemImage: "ellipsis.circle").font(.headline)
-            }.disabled(selectedFoodIds.isEmpty)
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(selectedFoodIds.isEmpty ? .secondary : Color.themePrimary)
+            }
+            .disabled(selectedFoodIds.isEmpty)
         }
-        .padding(.horizontal).padding(.vertical, 12)
+        .padding(.horizontal).padding(.vertical, 10)
         .background(Color(.secondarySystemBackground))
     }
 
@@ -290,11 +295,7 @@ struct FoodBankView: View {
     private func batchAIEstimateNutrition() async {
         await runBatchAIOperation(progressLabel: "Estimating") { service, food in
             let result = try await service.estimateNutrition(for: food.name, category: food.category.displayName)
-            food.nutrition = NutritionInfo(
-                calories: result.calories, protein: result.protein, carbohydrates: result.carbohydrates,
-                fat: result.fat, saturatedFat: result.saturatedFat, sugar: result.sugar,
-                fiber: result.fiber, sodium: result.sodium
-            )
+            food.nutrition = NutritionInfo(from: result, source: .aiEstimate)
         }
     }
 

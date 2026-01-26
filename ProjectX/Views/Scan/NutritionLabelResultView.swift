@@ -57,15 +57,25 @@ struct NutritionLabelResultView: View {
                 TextField("Food Name", text: $foodName)
                 CategoryPicker(selection: $category)
             }
-            Section("Extracted Nutrition (per 100g)") {
+            Section("Macronutrients (per 100g)") {
                 LabeledContent("Calories", value: "\(Int(nutrition.calories)) kcal")
                 LabeledContent("Protein", value: String(format: "%.1fg", nutrition.protein))
                 LabeledContent("Carbohydrates", value: String(format: "%.1fg", nutrition.carbohydrates))
-                LabeledContent("Fat", value: String(format: "%.1fg", nutrition.fat))
-                LabeledContent("Saturated Fat", value: String(format: "%.1fg", nutrition.saturatedFat))
                 LabeledContent("Sugar", value: String(format: "%.1fg", nutrition.sugar))
                 LabeledContent("Fiber", value: String(format: "%.1fg", nutrition.fiber))
+                LabeledContent("Fat", value: String(format: "%.1fg", nutrition.fat))
+                LabeledContent("Saturated Fat", value: String(format: "%.1fg", nutrition.saturatedFat))
+                LabeledContent("Omega-3", value: String(format: "%.1fg", nutrition.omega3))
+                LabeledContent("Omega-6", value: String(format: "%.1fg", nutrition.omega6))
                 LabeledContent("Sodium", value: String(format: "%.0fmg", nutrition.sodium))
+            }
+            Section("Micronutrients (per 100g)") {
+                LabeledContent("Vitamin A", value: String(format: "%.0f mcg", nutrition.vitaminA))
+                LabeledContent("Vitamin C", value: String(format: "%.1f mg", nutrition.vitaminC))
+                LabeledContent("Vitamin D", value: String(format: "%.1f mcg", nutrition.vitaminD))
+                LabeledContent("Calcium", value: String(format: "%.0f mg", nutrition.calcium))
+                LabeledContent("Iron", value: String(format: "%.1f mg", nutrition.iron))
+                LabeledContent("Potassium", value: String(format: "%.0f mg", nutrition.potassium))
             }
             Section {
                 Button("Save to Food Bank") { saveFood(nutrition) }
@@ -95,16 +105,7 @@ struct NutritionLabelResultView: View {
     }
 
     private func saveFood(_ nutrition: ExtractedNutrition) {
-        let nutritionInfo = NutritionInfo(
-            calories: nutrition.calories,
-            protein: nutrition.protein,
-            carbohydrates: nutrition.carbohydrates,
-            fat: nutrition.fat,
-            saturatedFat: nutrition.saturatedFat,
-            sugar: nutrition.sugar,
-            fiber: nutrition.fiber,
-            sodium: nutrition.sodium
-        )
+        let nutritionInfo = NutritionInfo(from: nutrition, source: .labelScan)
         let food = Food(name: foodName, category: category, nutrition: nutritionInfo)
         context.insert(food)
 

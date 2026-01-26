@@ -30,8 +30,8 @@ enum LLMPrompts {
         - Do NOT include comments or explanations
         - Do NOT say "Here is" or any introduction
         - Ensure valid JSON syntax (proper quotes, commas, brackets)
-        - Use null for missing values, not "null" string
         - Use numbers without quotes for numeric fields
+        - NEVER use null for numeric fields - use 0 instead
         - Start response with { or [ and end with } or ]
         """
 
@@ -113,12 +113,14 @@ enum LLMPrompts {
     // MARK: - Nutrition Prompts
 
     private static let nutritionJSON = """
-        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"sugar":0,"fiber":0,"sodium":0}
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"omega3":0,"omega6":0,"sugar":0,"fiber":0,"sodium":0,"vitaminA":0,"vitaminC":0,"vitaminD":0,"calcium":0,"iron":0,"potassium":0}
         """
 
     private static let nutritionFieldRules = """
-        - All values per 100g (macros in grams, calories in kcal, sodium in mg)
-        - Use 0 for missing values
+        - All values per 100g, ALL 16 fields REQUIRED (never null)
+        - calories: kcal, protein/carbohydrates/fat/saturatedFat/omega3/omega6/sugar/fiber: grams
+        - sodium/vitaminC/calcium/iron/potassium: mg, vitaminA/vitaminD: mcg
+        - Use 0 if unknown, but provide best estimate when possible
         """
 
     static let nutritionLabelImagePrompt = """
@@ -208,14 +210,17 @@ enum LLMPrompts {
         Sum all members' individual needs into household totals.
 
         Required JSON structure:
-        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"sugar":0,"fiber":0,"sodium":0,"explanation":"Brief explanation of the calculation"}
+        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"omega3":0,"omega6":0,"sugar":0,"fiber":0,"sodium":0,"vitaminA":0,"vitaminC":0,"vitaminD":0,"calcium":0,"iron":0,"potassium":0,"explanation":"Brief explanation"}
 
-        Field rules:
+        Field rules (ALL 17 fields REQUIRED, never null):
         - calories: total daily kcal for entire household
-        - protein/carbohydrates/fat: grams per day for entire household
-        - sugar: recommended daily limit in grams (sum of individual limits)
-        - fiber: recommended daily intake in grams (sum of individual targets)
-        - sodium: recommended daily limit in mg (sum of individual limits, typically 2300mg per adult)
+        - protein/carbohydrates/fat/saturatedFat: grams per day
+        - omega3: grams (1.1-1.6g/adult), omega6: grams (11-17g/adult)
+        - sugar/fiber: grams per day
+        - sodium: mg (2300mg/adult limit)
+        - vitaminA: mcg (700-900/adult), vitaminD: mcg (15-20/adult)
+        - vitaminC: mg (75-90/adult), calcium: mg (1000-1200/adult)
+        - iron: mg (8-18/adult), potassium: mg (2600-3400/adult)
         - explanation: 1-2 sentences explaining the key factors
         \(strictOutputRules)
         """

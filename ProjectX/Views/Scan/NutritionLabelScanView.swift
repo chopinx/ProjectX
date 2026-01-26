@@ -7,7 +7,7 @@ struct NutritionLabelScanView: View {
     @State private var showCamera = false
     @State private var showPhotoPicker = false
     @State private var showTextInput = false
-    @State private var capturedImage: UIImage?
+    @State private var capturedImages: [UIImage] = []
     @State private var labelText = ""
     @State private var isExtracting = false
     @State private var errorMessage: String?
@@ -19,8 +19,8 @@ struct NutritionLabelScanView: View {
                 extractingView
             } else if let error = errorMessage {
                 errorView(error)
-            } else if let image = capturedImage {
-                imagePreview(image)
+            } else if !capturedImages.isEmpty {
+                imagesPreview
             } else {
                 captureOptionsView
             }
@@ -32,11 +32,11 @@ struct NutritionLabelScanView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraView(sourceType: .camera, onImageCaptured: handleImageCaptured, onCancel: { showCamera = false })
+            CameraView(sourceType: .camera, onImageCaptured: { capturedImages.append($0); showCamera = false }, onCancel: { showCamera = false })
                 .ignoresSafeArea()
         }
         .sheet(isPresented: $showPhotoPicker) {
-            CameraView(sourceType: .photoLibrary, onImageCaptured: handleImageCaptured, onCancel: { showPhotoPicker = false })
+            MultiPhotoPicker(maxSelection: 5, onImagesPicked: { capturedImages.append(contentsOf: $0); showPhotoPicker = false }, onCancel: { showPhotoPicker = false })
         }
         .sheet(isPresented: $showTextInput) {
             TextInputSheet(text: $labelText, title: "Enter Nutrition",
@@ -59,7 +59,7 @@ struct NutritionLabelScanView: View {
             Image(systemName: "text.viewfinder").font(.system(size: 80)).foregroundStyle(Color.themePrimary)
             VStack(spacing: 8) {
                 Text("Scan Nutrition Label").font(.title2).fontWeight(.semibold)
-                Text("Take a photo, choose from library, or enter text")
+                Text("Take photos, choose from library, or enter text")
                     .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             VStack(spacing: 12) {
@@ -67,7 +67,7 @@ struct NutritionLabelScanView: View {
                     Label("Take Photo", systemImage: "camera.fill").frame(maxWidth: .infinity)
                 }.buttonStyle(.borderedProminent).tint(Color.themePrimary)
                 Button { showPhotoPicker = true } label: {
-                    Label("Choose from Library", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity)
+                    Label("Choose Photos", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity)
                 }.buttonStyle(.bordered).tint(Color.themePrimary)
                 Button { labelText = ""; showTextInput = true } label: {
                     Label("Enter Text", systemImage: "text.alignleft").frame(maxWidth: .infinity)
@@ -82,10 +82,10 @@ struct NutritionLabelScanView: View {
             Spacer()
             ErrorStateView("Extraction Failed", message: message, retryAction: nil)
             HStack(spacing: 16) {
-                Button("Try Again") { capturedImage = nil; labelText = ""; errorMessage = nil }
+                Button("Try Again") { capturedImages.removeAll(); labelText = ""; errorMessage = nil }
                     .buttonStyle(.bordered).tint(Color.themePrimary)
-                if capturedImage != nil {
-                    Button("Retry") { errorMessage = nil; Task { await extractFromImage() } }
+                if !capturedImages.isEmpty {
+                    Button("Retry") { errorMessage = nil; Task { await extractFromImages() } }
                         .buttonStyle(.borderedProminent).tint(Color.themePrimary)
                 }
             }
@@ -94,33 +94,64 @@ struct NutritionLabelScanView: View {
         }
     }
 
-    private func imagePreview(_ image: UIImage) -> some View {
+    private var imagesPreview: some View {
         VStack(spacing: 16) {
-            Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 300)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(capturedImages.indices, id: \.self) { i in
+                        ZStack(alignment: .topTrailing) {
+                            Image(uiImage: capturedImages[i]).resizable().scaledToFill()
+                                .frame(width: 120, height: 160).clipShape(RoundedRectangle(cornerRadius: 8))
+                            Button { capturedImages.remove(at: i) } label: {
+                                Image(systemName: "xmark.circle.fill").font(.title3)
+                                    .foregroundStyle(.white, .red)
+                            }.offset(x: 6, y: -6)
+                        }
+                    }
+                    Button { showCamera = true } label: {
+                        VStack {
+                            Image(systemName: "camera.fill").font(.title2)
+                            Text("Add").font(.caption)
+                        }
+                        .frame(width: 80, height: 160)
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }.buttonStyle(.plain)
+                    Button { showPhotoPicker = true } label: {
+                        VStack {
+                            Image(systemName: "photo.badge.plus").font(.title2)
+                            Text("Add").font(.caption)
+                        }
+                        .frame(width: 80, height: 160)
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }.buttonStyle(.plain)
+                }.padding(.horizontal)
+            }
+            Text("\(capturedImages.count) photo\(capturedImages.count == 1 ? "" : "s") selected")
+                .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 16) {
-                Button("Retake") { capturedImage = nil }.buttonStyle(.bordered)
-                Button("Extract") { Task { await extractFromImage() } }.buttonStyle(.borderedProminent)
+                Button("Clear All") { capturedImages.removeAll() }.buttonStyle(.bordered)
+                Button("Extract") { Task { await extractFromImages() } }.buttonStyle(.borderedProminent)
             }
         }
     }
 
-    private func handleImageCaptured(_ image: UIImage) {
-        showCamera = false
-        showPhotoPicker = false
-        capturedImage = image
-    }
-
-    private func extractFromImage() async {
-        guard let image = capturedImage else { return }
+    private func extractFromImages() async {
+        guard !capturedImages.isEmpty else { return }
         isExtracting = true
         errorMessage = nil
         do {
-            let text = try await OCRService().extractText(from: image)
+            let ocr = OCRService()
+            var allText = ""
+            for (i, image) in capturedImages.enumerated() {
+                let text = try await ocr.extractText(from: image)
+                allText += (i > 0 ? "\n\n--- Image \(i + 1) ---\n\n" : "") + text
+            }
             guard let service = LLMServiceFactory.create(settings: settings) else {
                 throw LLMError.invalidAPIKey
             }
-            onExtracted(try await service.extractNutritionLabel(from: text))
+            onExtracted(try await service.extractNutritionLabel(from: allText))
         } catch let error as LLMError {
             errorMessage = error.errorDescription
         } catch {

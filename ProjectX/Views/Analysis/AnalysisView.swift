@@ -126,18 +126,20 @@ struct AnalysisView: View {
     }
 
     private var nutritionSourceSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Nutrition Sources").font(.headline)
+                Text("Nutrition by Category").font(.headline)
                 Spacer()
                 Picker("Level", selection: $categoryLevelRaw) {
                     ForEach(CategoryLevel.allCases) { Text($0.rawValue).tag($0.rawValue) }
-                }.pickerStyle(.segmented).frame(width: 200)
+                }.pickerStyle(.segmented).frame(width: 180)
             }
-            NutritionPieChart(title: "Calories", data: nutritionBreakdown, keyPath: \.caloriesPercent)
-            NutritionPieChart(title: "Protein", data: nutritionBreakdown, keyPath: \.proteinPercent)
-            NutritionPieChart(title: "Carbs", data: nutritionBreakdown, keyPath: \.carbsPercent)
-            NutritionPieChart(title: "Fat", data: nutritionBreakdown, keyPath: \.fatPercent)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                NutritionPieChart(title: "Calories", data: nutritionBreakdown, keyPath: \.caloriesPercent)
+                NutritionPieChart(title: "Protein", data: nutritionBreakdown, keyPath: \.proteinPercent)
+                NutritionPieChart(title: "Carbs", data: nutritionBreakdown, keyPath: \.carbsPercent)
+                NutritionPieChart(title: "Fat", data: nutritionBreakdown, keyPath: \.fatPercent)
+            }
         }
         .padding().background(.regularMaterial).clipShape(RoundedRectangle(cornerRadius: 12))
     }
@@ -194,6 +196,12 @@ struct AnalysisView: View {
     }
 }
 
+// MARK: - Helpers
+
+private func statusColor(pct: Double, isLimit: Bool) -> Color {
+    isLimit ? (pct <= 100 ? .themeSuccess : .themeError) : (pct < 70 ? .themeWarning : pct <= 130 ? .themeSuccess : .themeInfo)
+}
+
 // MARK: - Supporting Views
 
 private struct LegendItem: View {
@@ -207,75 +215,152 @@ private struct NutritionPieChart: View {
     private var sorted: [NutritionBreakdown] { data.sorted { $0[keyPath: keyPath] > $1[keyPath: keyPath] } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline).fontWeight(.medium)
-            HStack(spacing: 16) {
-                Chart(sorted) { SectorMark(angle: .value("Value", $0[keyPath: keyPath]), innerRadius: .ratio(0.5), angularInset: 1).foregroundStyle($0.color).cornerRadius(4) }
-                    .frame(width: 100, height: 100)
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(sorted.prefix(5)) { item in
-                        HStack(spacing: 6) {
-                            Circle().fill(item.color).frame(width: 8, height: 8)
-                            Text(item.category).font(.caption).lineLimit(1)
-                            Spacer()
-                            Text("\(Int(item[keyPath: keyPath]))%").font(.caption).foregroundStyle(.secondary)
-                        }
+        VStack(spacing: 8) {
+            Text(title).font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
+            Chart(sorted) { SectorMark(angle: .value("Value", $0[keyPath: keyPath]), innerRadius: .ratio(0.5), angularInset: 1).foregroundStyle($0.color).cornerRadius(3) }
+                .frame(width: 80, height: 80)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(sorted.prefix(3)) { item in
+                    HStack(spacing: 4) {
+                        Circle().fill(item.color).frame(width: 6, height: 6)
+                        Text(item.category).font(.caption2).lineLimit(1)
+                        Spacer()
+                        Text("\(Int(item[keyPath: keyPath]))%").font(.caption2).foregroundStyle(.secondary)
                     }
-                    if sorted.count > 5 { Text("+\(sorted.count - 5) more").font(.caption2).foregroundStyle(.tertiary) }
                 }
             }
         }
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
     }
 }
 
 private struct DailyAverageCard: View {
     let summary: NutritionSummary, target: NutritionTarget, dayCount: Int
-    private var daily: NutritionSummary { summary.dailyAverage }
+    @State private var showMicros = false
+    private var d: NutritionSummary { summary.dailyAverage }
+    private var t: NutritionTarget { target }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { Text("Daily Average").font(.headline); Spacer(); Text("\(dayCount) days").font(.caption).foregroundStyle(.secondary) }
+            HStack {
+                Text("Daily Average").font(.headline)
+                Spacer()
+                Text("\(dayCount) days").font(.caption).padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.themePrimary.opacity(0.15)).clipShape(Capsule())
+            }
+            VStack(spacing: 8) {
+                NutrientRow("Calories", d.totalCalories, t.calories, .nutritionCalories)
+                NutrientRow("Protein", d.totalProtein, t.protein, .nutritionProtein)
+                NutrientRow("Carbs", d.totalCarbohydrates, t.carbohydrates, .nutritionCarbs)
+                NutrientRow("Fat", d.totalFat, t.fat, .nutritionFat)
+            }
             Divider()
-            VStack(spacing: 10) {
-                NutrientRow("Calories", daily.totalCalories, target.calories, "kcal", .nutritionCalories)
-                NutrientRow("Protein", daily.totalProtein, target.protein, "g", .nutritionProtein)
-                NutrientRow("Carbs", daily.totalCarbohydrates, target.carbohydrates, "g", .nutritionCarbs)
-                NutrientRow("Fat", daily.totalFat, target.fat, "g", .nutritionFat)
-                NutrientRow("Sugar", daily.totalSugar, target.sugar, "g", .nutritionSugar, isLimit: true)
-                NutrientRow("Fiber", daily.totalFiber, target.fiber, "g", .nutritionFiber)
-                NutrientRow("Sodium", daily.totalSodium, target.sodium, "mg", .nutritionSodium, isLimit: true)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Fat Details").font(.caption).foregroundStyle(.secondary)
+                    CompactNutrient("Saturated", d.totalSaturatedFat, t.saturatedFat, limit: true)
+                    CompactNutrient("Omega-3", d.totalOmega3, t.omega3)
+                    CompactNutrient("Omega-6", d.totalOmega6, t.omega6)
+                }
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Limits").font(.caption).foregroundStyle(.secondary)
+                    CompactNutrient("Sugar", d.totalSugar, t.sugar, limit: true)
+                    CompactNutrient("Fiber", d.totalFiber, t.fiber)
+                    CompactNutrient("Sodium", d.totalSodium, t.sodium, limit: true)
+                }
+            }
+            Divider()
+            DisclosureGroup(isExpanded: $showMicros) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    MicroNutrient("Vitamin A", d.totalVitaminA, t.vitaminA, .purple)
+                    MicroNutrient("Vitamin C", d.totalVitaminC, t.vitaminC, .orange)
+                    MicroNutrient("Vitamin D", d.totalVitaminD, t.vitaminD, .yellow)
+                    MicroNutrient("Calcium", d.totalCalcium, t.calcium, .cyan)
+                    MicroNutrient("Iron", d.totalIron, t.iron, .red)
+                    MicroNutrient("Potassium", d.totalPotassium, t.potassium, .green)
+                }.padding(.top, 8)
+            } label: {
+                HStack {
+                    Text("Micronutrients").font(.subheadline).fontWeight(.medium)
+                    Spacer()
+                    Text(showMicros ? "Hide" : "Show").font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .padding().background(.regularMaterial).clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
-private struct NutrientRow: View {
-    let label: String, value: Double, target: Double, unit: String, color: Color, isLimit: Bool
-
-    init(_ label: String, _ value: Double, _ target: Double, _ unit: String, _ color: Color, isLimit: Bool = false) {
-        self.label = label; self.value = value; self.target = target; self.unit = unit; self.color = color; self.isLimit = isLimit
+private struct CompactNutrient: View {
+    let label: String, value: Double, target: Double, limit: Bool
+    init(_ label: String, _ value: Double, _ target: Double, limit: Bool = false) {
+        self.label = label; self.value = value; self.target = target; self.limit = limit
     }
-
     private var pct: Double { target > 0 ? (value / target) * 100 : 0 }
-    private var progressColor: Color { isLimit ? (pct <= 100 ? .themeSuccess : .themeError) : (pct < 70 ? .themeWarning : pct <= 130 ? .themeSuccess : .themeInfo) }
-    private var icon: String { isLimit ? (pct <= 100 ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : (pct < 70 ? "arrow.down.circle.fill" : pct <= 130 ? "checkmark.circle.fill" : "arrow.up.circle.fill") }
 
     var body: some View {
-        HStack {
-            HStack(spacing: 4) { Circle().fill(color).frame(width: 8, height: 8); Text(label) }.frame(width: 80, alignment: .leading)
+        HStack(spacing: 4) {
+            Text(label).font(.caption2).lineLimit(1).frame(maxWidth: 60, alignment: .leading)
+            Spacer()
+            Text("\(Int(value))/\(Int(target))").font(.caption2).fontWeight(.medium).lineLimit(1)
+            Circle().fill(statusColor(pct: pct, isLimit: limit)).frame(width: 6, height: 6)
+        }
+    }
+}
+
+private struct MicroNutrient: View {
+    let label: String, value: Double, target: Double, color: Color
+    init(_ label: String, _ value: Double, _ target: Double, _ color: Color) {
+        self.label = label; self.value = value; self.target = target; self.color = color
+    }
+    private var pct: Double { target > 0 ? min((value / target) * 100, 100) : 0 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+                Text("\(Int(pct))%").font(.caption2).fontWeight(.medium).foregroundStyle(statusColor(pct: pct, isLimit: false))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2).fill(color.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 2).fill(color).frame(width: geo.size.width * pct / 100)
+                }
+            }.frame(height: 4)
+            Text("\(Int(value))/\(Int(target))").font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+        }
+        .padding(8).background(Color(.tertiarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct NutrientRow: View {
+    let label: String, value: Double, target: Double, color: Color
+    init(_ label: String, _ value: Double, _ target: Double, _ color: Color) {
+        self.label = label; self.value = value; self.target = target; self.color = color
+    }
+    private var pct: Double { target > 0 ? (value / target) * 100 : 0 }
+    private var progColor: Color { statusColor(pct: pct, isLimit: false) }
+    private var icon: String { pct < 70 ? "arrow.down.circle.fill" : pct <= 130 ? "checkmark.circle.fill" : "arrow.up.circle.fill" }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(label).font(.subheadline).lineLimit(1)
+            }.frame(width: 75, alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 4).fill(progressColor).frame(width: min(geo.size.width, geo.size.width * pct / 100))
+                    RoundedRectangle(cornerRadius: 4).fill(progColor).frame(width: min(geo.size.width, geo.size.width * pct / 100))
                 }
             }.frame(height: 8)
-            HStack(spacing: 4) {
-                Text("\(Int(value))").fontWeight(.medium).frame(width: 45, alignment: .trailing)
-                Text("/\(Int(target))").foregroundStyle(.secondary).frame(width: 45, alignment: .leading)
-                Image(systemName: icon).foregroundStyle(progressColor).font(.caption)
-            }.font(.caption)
+            HStack(spacing: 2) {
+                Text("\(Int(value))").fontWeight(.medium).frame(width: 40, alignment: .trailing)
+                Text("/\(Int(target))").foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
+                Image(systemName: icon).foregroundStyle(progColor)
+            }.font(.caption).lineLimit(1)
         }
     }
 }

@@ -1,21 +1,33 @@
 import Foundation
 
 struct NutritionSummary {
+    // Macronutrients
     var totalCalories: Double
     var totalProtein: Double
     var totalCarbohydrates: Double
     var totalFat: Double
     var totalSaturatedFat: Double
+    var totalOmega3: Double
+    var totalOmega6: Double
     var totalSugar: Double
     var totalFiber: Double
     var totalSodium: Double
+    // Micronutrients
+    var totalVitaminA: Double
+    var totalVitaminC: Double
+    var totalVitaminD: Double
+    var totalCalcium: Double
+    var totalIron: Double
+    var totalPotassium: Double
     var dayCount: Int
 
     static var zero: NutritionSummary {
         NutritionSummary(
             totalCalories: 0, totalProtein: 0, totalCarbohydrates: 0,
-            totalFat: 0, totalSaturatedFat: 0, totalSugar: 0,
-            totalFiber: 0, totalSodium: 0, dayCount: 0
+            totalFat: 0, totalSaturatedFat: 0, totalOmega3: 0, totalOmega6: 0,
+            totalSugar: 0, totalFiber: 0, totalSodium: 0,
+            totalVitaminA: 0, totalVitaminC: 0, totalVitaminD: 0,
+            totalCalcium: 0, totalIron: 0, totalPotassium: 0, dayCount: 0
         )
     }
 
@@ -25,8 +37,12 @@ struct NutritionSummary {
         return NutritionSummary(
             totalCalories: totalCalories / d, totalProtein: totalProtein / d,
             totalCarbohydrates: totalCarbohydrates / d, totalFat: totalFat / d,
-            totalSaturatedFat: totalSaturatedFat / d, totalSugar: totalSugar / d,
-            totalFiber: totalFiber / d, totalSodium: totalSodium / d, dayCount: 1
+            totalSaturatedFat: totalSaturatedFat / d, totalOmega3: totalOmega3 / d,
+            totalOmega6: totalOmega6 / d, totalSugar: totalSugar / d,
+            totalFiber: totalFiber / d, totalSodium: totalSodium / d,
+            totalVitaminA: totalVitaminA / d, totalVitaminC: totalVitaminC / d,
+            totalVitaminD: totalVitaminD / d, totalCalcium: totalCalcium / d,
+            totalIron: totalIron / d, totalPotassium: totalPotassium / d, dayCount: 1
         )
     }
 
@@ -46,9 +62,17 @@ struct NutritionSummary {
                 summary.totalCarbohydrates += nutrition.carbohydrates
                 summary.totalFat += nutrition.fat
                 summary.totalSaturatedFat += nutrition.saturatedFat
+                summary.totalOmega3 += nutrition.omega3
+                summary.totalOmega6 += nutrition.omega6
                 summary.totalSugar += nutrition.sugar
                 summary.totalFiber += nutrition.fiber
                 summary.totalSodium += nutrition.sodium
+                summary.totalVitaminA += nutrition.vitaminA
+                summary.totalVitaminC += nutrition.vitaminC
+                summary.totalVitaminD += nutrition.vitaminD
+                summary.totalCalcium += nutrition.calcium
+                summary.totalIron += nutrition.iron
+                summary.totalPotassium += nutrition.potassium
             }
         }
 

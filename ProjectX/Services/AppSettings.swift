@@ -96,21 +96,37 @@ enum LLMModel: Equatable, Identifiable {
 }
 
 struct NutritionTarget: Codable, Equatable {
+    // Macronutrients
     var calories: Double
     var protein: Double
     var carbohydrates: Double
     var fat: Double
+    var saturatedFat: Double
+    var omega3: Double
+    var omega6: Double
     var sugar: Double
     var fiber: Double
     var sodium: Double
+    // Micronutrients
+    var vitaminA: Double
+    var vitaminC: Double
+    var vitaminD: Double
+    var calcium: Double
+    var iron: Double
+    var potassium: Double
 
     static let `default` = NutritionTarget(
         calories: 2000, protein: 50, carbohydrates: 250,
-        fat: 65, sugar: 50, fiber: 25, sodium: 2300
+        fat: 65, saturatedFat: 20, omega3: 1.6, omega6: 17, sugar: 50, fiber: 25, sodium: 2300,
+        vitaminA: 900, vitaminC: 90, vitaminD: 20, calcium: 1000, iron: 18, potassium: 4700
     )
 
     static var zero: NutritionTarget {
-        NutritionTarget(calories: 0, protein: 0, carbohydrates: 0, fat: 0, sugar: 0, fiber: 0, sodium: 0)
+        NutritionTarget(
+            calories: 0, protein: 0, carbohydrates: 0, fat: 0, saturatedFat: 0, omega3: 0, omega6: 0,
+            sugar: 0, fiber: 0, sodium: 0, vitaminA: 0, vitaminC: 0, vitaminD: 0,
+            calcium: 0, iron: 0, potassium: 0
+        )
     }
 }
 

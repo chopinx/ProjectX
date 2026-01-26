@@ -138,10 +138,25 @@ struct FamilyGuideView: View {
             } else if let s = suggestion {
                 List {
                     Section("AI Recommendation") { Text(s.explanation).font(.callout).foregroundStyle(.secondary) }
-                    Section("Daily Targets") {
-                        LabeledContent("Calories", value: "\(Int(s.calories)) kcal"); LabeledContent("Protein", value: "\(Int(s.protein))g")
-                        LabeledContent("Carbs", value: "\(Int(s.carbohydrates))g"); LabeledContent("Fat", value: "\(Int(s.fat))g")
-                        LabeledContent("Sugar", value: "≤\(Int(s.sugar))g"); LabeledContent("Fiber", value: "\(Int(s.fiber))g"); LabeledContent("Sodium", value: "≤\(Int(s.sodium))mg")
+                    Section("Daily Macronutrients") {
+                        LabeledContent("Calories", value: "\(Int(s.calories)) kcal")
+                        LabeledContent("Protein", value: "\(Int(s.protein))g")
+                        LabeledContent("Carbs", value: "\(Int(s.carbohydrates))g")
+                        LabeledContent("Fat", value: "\(Int(s.fat))g")
+                        LabeledContent("Saturated Fat", value: "≤\(Int(s.saturatedFat))g")
+                        LabeledContent("Omega-3", value: String(format: "%.1fg", s.omega3))
+                        LabeledContent("Omega-6", value: "\(Int(s.omega6))g")
+                        LabeledContent("Sugar", value: "≤\(Int(s.sugar))g")
+                        LabeledContent("Fiber", value: "\(Int(s.fiber))g")
+                        LabeledContent("Sodium", value: "≤\(Int(s.sodium))mg")
+                    }
+                    Section("Daily Micronutrients") {
+                        LabeledContent("Vitamin A", value: "\(Int(s.vitaminA)) mcg")
+                        LabeledContent("Vitamin C", value: "\(Int(s.vitaminC)) mg")
+                        LabeledContent("Vitamin D", value: "\(Int(s.vitaminD)) mcg")
+                        LabeledContent("Calcium", value: "\(Int(s.calcium)) mg")
+                        LabeledContent("Iron", value: "\(Int(s.iron)) mg")
+                        LabeledContent("Potassium", value: "\(Int(s.potassium)) mg")
                     }
                     Section { Button { Task { await generate() } } label: { Label("Regenerate", systemImage: "arrow.clockwise") } }
                 }
@@ -152,9 +167,25 @@ struct FamilyGuideView: View {
     private var editView: some View {
         let t = Binding(get: { editedTarget ?? suggestion?.toNutritionTarget() ?? .default }, set: { editedTarget = $0 })
         return List {
-            Section("Adjust Targets") {
-                TR("Calories", t.calories, "kcal"); TR("Protein", t.protein, "g"); TR("Carbs", t.carbohydrates, "g")
-                TR("Fat", t.fat, "g"); TR("Sugar", t.sugar, "g"); TR("Fiber", t.fiber, "g"); TR("Sodium", t.sodium, "mg")
+            Section("Macronutrients") {
+                TR("Calories", t.calories, "kcal")
+                TR("Protein", t.protein, "g")
+                TR("Carbs", t.carbohydrates, "g")
+                TR("Fat", t.fat, "g")
+                TR("Sat. Fat", t.saturatedFat, "g")
+                TR("Omega-3", t.omega3, "g")
+                TR("Omega-6", t.omega6, "g")
+                TR("Sugar", t.sugar, "g")
+                TR("Fiber", t.fiber, "g")
+                TR("Sodium", t.sodium, "mg")
+            }
+            Section("Micronutrients") {
+                TR("Vitamin A", t.vitaminA, "mcg")
+                TR("Vitamin C", t.vitaminC, "mg")
+                TR("Vitamin D", t.vitaminD, "mcg")
+                TR("Calcium", t.calcium, "mg")
+                TR("Iron", t.iron, "mg")
+                TR("Potassium", t.potassium, "mg")
             }
         }
     }

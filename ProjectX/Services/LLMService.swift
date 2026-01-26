@@ -43,15 +43,25 @@ struct ExtractedReceiptItem: Codable, Identifiable {
     }
 }
 
-struct ExtractedNutrition: Codable {
-    var calories: Double
-    var protein: Double
-    var carbohydrates: Double
-    var fat: Double
-    var saturatedFat: Double
-    var sugar: Double
-    var fiber: Double
-    var sodium: Double
+struct ExtractedNutrition: Decodable {
+    var calories, protein, carbohydrates, fat, saturatedFat: Double
+    var omega3, omega6, sugar, fiber, sodium: Double
+    var vitaminA, vitaminC, vitaminD, calcium, iron, potassium: Double
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func d(_ key: CodingKeys) -> Double { (try? c.decodeIfPresent(Double.self, forKey: key)) ?? 0 }
+        calories = d(.calories); protein = d(.protein); carbohydrates = d(.carbohydrates)
+        fat = d(.fat); saturatedFat = d(.saturatedFat); omega3 = d(.omega3); omega6 = d(.omega6)
+        sugar = d(.sugar); fiber = d(.fiber); sodium = d(.sodium)
+        vitaminA = d(.vitaminA); vitaminC = d(.vitaminC); vitaminD = d(.vitaminD)
+        calcium = d(.calcium); iron = d(.iron); potassium = d(.potassium)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case calories, protein, carbohydrates, fat, saturatedFat, omega3, omega6
+        case sugar, fiber, sodium, vitaminA, vitaminC, vitaminD, calcium, iron, potassium
+    }
 }
 
 struct FoodMatch: Codable, Identifiable {
@@ -71,21 +81,35 @@ struct SuggestedFoodInfo: Codable {
     var tags: [String]
 }
 
-struct SuggestedNutritionTargets: Codable {
-    var calories: Double
-    var protein: Double
-    var carbohydrates: Double
-    var fat: Double
-    var sugar: Double
-    var fiber: Double
-    var sodium: Double
+struct SuggestedNutritionTargets: Decodable {
+    var calories, protein, carbohydrates, fat, saturatedFat: Double
+    var omega3, omega6, sugar, fiber, sodium: Double
+    var vitaminA, vitaminC, vitaminD, calcium, iron, potassium: Double
     var explanation: String
 
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let t = NutritionTarget.default
+        func d(_ key: CodingKeys, _ def: Double) -> Double { (try? c.decodeIfPresent(Double.self, forKey: key)) ?? def }
+        calories = d(.calories, t.calories); protein = d(.protein, t.protein); carbohydrates = d(.carbohydrates, t.carbohydrates)
+        fat = d(.fat, t.fat); saturatedFat = d(.saturatedFat, t.saturatedFat); omega3 = d(.omega3, t.omega3); omega6 = d(.omega6, t.omega6)
+        sugar = d(.sugar, t.sugar); fiber = d(.fiber, t.fiber); sodium = d(.sodium, t.sodium)
+        vitaminA = d(.vitaminA, t.vitaminA); vitaminC = d(.vitaminC, t.vitaminC); vitaminD = d(.vitaminD, t.vitaminD)
+        calcium = d(.calcium, t.calcium); iron = d(.iron, t.iron); potassium = d(.potassium, t.potassium)
+        explanation = (try? c.decodeIfPresent(String.self, forKey: .explanation)) ?? ""
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case calories, protein, carbohydrates, fat, saturatedFat, omega3, omega6
+        case sugar, fiber, sodium, vitaminA, vitaminC, vitaminD, calcium, iron, potassium, explanation
+    }
+
     func toNutritionTarget() -> NutritionTarget {
-        NutritionTarget(
-            calories: calories, protein: protein, carbohydrates: carbohydrates,
-            fat: fat, sugar: sugar, fiber: fiber, sodium: sodium
-        )
+        NutritionTarget(calories: calories, protein: protein, carbohydrates: carbohydrates,
+                        fat: fat, saturatedFat: saturatedFat, omega3: omega3, omega6: omega6,
+                        sugar: sugar, fiber: fiber, sodium: sodium,
+                        vitaminA: vitaminA, vitaminC: vitaminC, vitaminD: vitaminD,
+                        calcium: calcium, iron: iron, potassium: potassium)
     }
 }
 

@@ -43,6 +43,7 @@ struct TripDetailView: View {
     @State private var deletedItems: [PurchasedItem] = []
     @State private var editingItem: PurchasedItem?
     @State private var showingAddItem = false
+    @State private var showingAddItemsAI = false
     @State private var showingSaveError = false
     @State private var sortOption: ItemSortOption = .name
     @State private var sortAscending = true
@@ -101,8 +102,12 @@ struct TripDetailView: View {
                             }
                     }
                 }
+                Button { showingAddItemsAI = true } label: {
+                    Label("Add Items (AI)", systemImage: "sparkles")
+                        .foregroundStyle(Color.themePrimary)
+                }
                 Button { showingAddItem = true } label: {
-                    Label("Add Item", systemImage: "plus.circle")
+                    Label("Add Item Manually", systemImage: "plus.circle")
                         .foregroundStyle(Color.themePrimary)
                 }
             } header: {
@@ -162,6 +167,15 @@ struct TripDetailView: View {
                     items.append(newItem)
                     showingAddItem = false
                 }
+            }
+        }
+        .sheet(isPresented: $showingAddItemsAI) {
+            AddItemsSheet { extractedItems in
+                for extracted in extractedItems {
+                    let item = PurchasedItem(name: extracted.name, quantity: extracted.quantityGrams, price: extracted.price)
+                    items.append(item)
+                }
+                showingAddItemsAI = false
             }
         }
         .alert("Save Error", isPresented: $showingSaveError) {

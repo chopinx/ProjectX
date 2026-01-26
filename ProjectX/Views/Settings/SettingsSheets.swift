@@ -146,7 +146,8 @@ struct ShareSheet: UIViewControllerRepresentable {
 // MARK: - Nutrition Target Sheet
 
 private struct TargetFields {
-    var protein, carbohydrates, fat, sugar, fiber, sodium: String
+    var protein, carbohydrates, fat, saturatedFat, omega3, omega6, sugar, fiber, sodium: String
+    var vitaminA, vitaminC, vitaminD, calcium, iron, potassium: String
 
     var calculatedCalories: Int {
         let p = (Double(protein) ?? 0) * 4
@@ -155,22 +156,31 @@ private struct TargetFields {
         return Int(p + c + f)
     }
 
-    init(from target: NutritionTarget) {
-        protein = String(Int(target.protein)); carbohydrates = String(Int(target.carbohydrates))
-        fat = String(Int(target.fat)); sugar = String(Int(target.sugar))
-        fiber = String(Int(target.fiber)); sodium = String(Int(target.sodium))
+    init(from t: NutritionTarget) {
+        func s(_ v: Double) -> String { String(Int(v)) }
+        protein = s(t.protein); carbohydrates = s(t.carbohydrates); fat = s(t.fat); saturatedFat = s(t.saturatedFat)
+        omega3 = String(format: "%.1f", t.omega3); omega6 = s(t.omega6)
+        sugar = s(t.sugar); fiber = s(t.fiber); sodium = s(t.sodium)
+        vitaminA = s(t.vitaminA); vitaminC = s(t.vitaminC); vitaminD = s(t.vitaminD)
+        calcium = s(t.calcium); iron = s(t.iron); potassium = s(t.potassium)
     }
 
     init(from level: ActivityLevel) {
         let b = level.baseline
-        protein = "\(b.pro)"; carbohydrates = "\(b.carb)"; fat = "\(b.fat)"
-        sugar = "25"; fiber = "25"; sodium = "2300"
+        protein = "\(b.pro)"; carbohydrates = "\(b.carb)"; fat = "\(b.fat)"; saturatedFat = "20"
+        omega3 = "1.6"; omega6 = "17"; sugar = "25"; fiber = "25"; sodium = "2300"
+        vitaminA = "900"; vitaminC = "90"; vitaminD = "20"; calcium = "1000"; iron = "18"; potassium = "4700"
     }
 
     func toTarget() -> NutritionTarget {
-        NutritionTarget(calories: Double(calculatedCalories), protein: Double(protein) ?? 50,
-            carbohydrates: Double(carbohydrates) ?? 250, fat: Double(fat) ?? 65,
-            sugar: Double(sugar) ?? 50, fiber: Double(fiber) ?? 25, sodium: Double(sodium) ?? 2300)
+        func d(_ s: String, _ fallback: Double) -> Double { Double(s) ?? fallback }
+        return NutritionTarget(
+            calories: Double(calculatedCalories), protein: d(protein, 50), carbohydrates: d(carbohydrates, 250),
+            fat: d(fat, 65), saturatedFat: d(saturatedFat, 20), omega3: d(omega3, 1.6), omega6: d(omega6, 17),
+            sugar: d(sugar, 50), fiber: d(fiber, 25), sodium: d(sodium, 2300),
+            vitaminA: d(vitaminA, 900), vitaminC: d(vitaminC, 90), vitaminD: d(vitaminD, 20),
+            calcium: d(calcium, 1000), iron: d(iron, 18), potassium: d(potassium, 4700)
+        )
     }
 }
 
@@ -211,14 +221,26 @@ struct NutritionTargetSheet: View {
                     TargetRow("Protein", $fields.protein, "g", hint: "4 kcal/g")
                     TargetRow("Carbohydrates", $fields.carbohydrates, "g", hint: "4 kcal/g")
                     TargetRow("Fat", $fields.fat, "g", hint: "9 kcal/g")
+                    TargetRow("Omega-3", $fields.omega3, "g")
+                    TargetRow("Omega-6", $fields.omega6, "g")
                 } header: { Text("Daily Macros") } footer: {
                     Text("Calories = (Protein × 4) + (Carbs × 4) + (Fat × 9)")
                 }
 
                 Section("Daily Limits") {
+                    TargetRow("Saturated Fat", $fields.saturatedFat, "g")
                     TargetRow("Sugar", $fields.sugar, "g")
                     TargetRow("Fiber", $fields.fiber, "g")
                     TargetRow("Sodium", $fields.sodium, "mg")
+                }
+
+                Section("Daily Micronutrients") {
+                    TargetRow("Vitamin A", $fields.vitaminA, "mcg")
+                    TargetRow("Vitamin C", $fields.vitaminC, "mg")
+                    TargetRow("Vitamin D", $fields.vitaminD, "mcg")
+                    TargetRow("Calcium", $fields.calcium, "mg")
+                    TargetRow("Iron", $fields.iron, "mg")
+                    TargetRow("Potassium", $fields.potassium, "mg")
                 }
             }
             .navigationTitle("Nutrition Targets")

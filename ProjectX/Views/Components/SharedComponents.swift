@@ -160,14 +160,25 @@ struct UnitTextField: View {
 
 /// Consolidated nutrition field values for form editing
 struct NutritionFields {
+    var source: NutritionSource = .manual
+    // Macronutrients
     var calories = ""
     var protein = ""
     var carbohydrates = ""
     var fat = ""
     var saturatedFat = ""
+    var omega3 = ""
+    var omega6 = ""
     var sugar = ""
     var fiber = ""
     var sodium = ""
+    // Micronutrients
+    var vitaminA = ""
+    var vitaminC = ""
+    var vitaminD = ""
+    var calcium = ""
+    var iron = ""
+    var potassium = ""
 
     var hasValues: Bool { !calories.isEmpty }
 
@@ -175,37 +186,64 @@ struct NutritionFields {
 
     init(from nutrition: NutritionInfo?) {
         guard let n = nutrition else { return }
+        source = n.source
         calories = n.calories > 0 ? String(format: "%.1f", n.calories) : ""
         protein = n.protein > 0 ? String(format: "%.1f", n.protein) : ""
         carbohydrates = n.carbohydrates > 0 ? String(format: "%.1f", n.carbohydrates) : ""
         fat = n.fat > 0 ? String(format: "%.1f", n.fat) : ""
         saturatedFat = n.saturatedFat > 0 ? String(format: "%.1f", n.saturatedFat) : ""
+        omega3 = n.omega3 > 0 ? String(format: "%.1f", n.omega3) : ""
+        omega6 = n.omega6 > 0 ? String(format: "%.1f", n.omega6) : ""
         sugar = n.sugar > 0 ? String(format: "%.1f", n.sugar) : ""
         fiber = n.fiber > 0 ? String(format: "%.1f", n.fiber) : ""
         sodium = n.sodium > 0 ? String(format: "%.1f", n.sodium) : ""
+        vitaminA = n.vitaminA > 0 ? String(format: "%.1f", n.vitaminA) : ""
+        vitaminC = n.vitaminC > 0 ? String(format: "%.1f", n.vitaminC) : ""
+        vitaminD = n.vitaminD > 0 ? String(format: "%.1f", n.vitaminD) : ""
+        calcium = n.calcium > 0 ? String(format: "%.1f", n.calcium) : ""
+        iron = n.iron > 0 ? String(format: "%.1f", n.iron) : ""
+        potassium = n.potassium > 0 ? String(format: "%.1f", n.potassium) : ""
     }
 
-    mutating func populate(from nutrition: ExtractedNutrition) {
+    mutating func populate(from nutrition: ExtractedNutrition, source newSource: NutritionSource) {
+        source = newSource
         calories = String(format: "%.1f", nutrition.calories)
         protein = String(format: "%.1f", nutrition.protein)
         carbohydrates = String(format: "%.1f", nutrition.carbohydrates)
         fat = String(format: "%.1f", nutrition.fat)
         saturatedFat = String(format: "%.1f", nutrition.saturatedFat)
+        omega3 = String(format: "%.1f", nutrition.omega3)
+        omega6 = String(format: "%.1f", nutrition.omega6)
         sugar = String(format: "%.1f", nutrition.sugar)
         fiber = String(format: "%.1f", nutrition.fiber)
         sodium = String(format: "%.1f", nutrition.sodium)
+        vitaminA = String(format: "%.1f", nutrition.vitaminA)
+        vitaminC = String(format: "%.1f", nutrition.vitaminC)
+        vitaminD = String(format: "%.1f", nutrition.vitaminD)
+        calcium = String(format: "%.1f", nutrition.calcium)
+        iron = String(format: "%.1f", nutrition.iron)
+        potassium = String(format: "%.1f", nutrition.potassium)
     }
 
     func toNutritionInfo() -> NutritionInfo {
         NutritionInfo(
+            source: source,
             calories: Double(calories) ?? 0,
             protein: Double(protein) ?? 0,
             carbohydrates: Double(carbohydrates) ?? 0,
             fat: Double(fat) ?? 0,
             saturatedFat: Double(saturatedFat) ?? 0,
+            omega3: Double(omega3) ?? 0,
+            omega6: Double(omega6) ?? 0,
             sugar: Double(sugar) ?? 0,
             fiber: Double(fiber) ?? 0,
-            sodium: Double(sodium) ?? 0
+            sodium: Double(sodium) ?? 0,
+            vitaminA: Double(vitaminA) ?? 0,
+            vitaminC: Double(vitaminC) ?? 0,
+            vitaminD: Double(vitaminD) ?? 0,
+            calcium: Double(calcium) ?? 0,
+            iron: Double(iron) ?? 0,
+            potassium: Double(potassium) ?? 0
         )
     }
 }
@@ -215,9 +253,20 @@ struct NutritionFields {
 /// Reusable nutrition form section with hierarchical nutrition fields
 struct NutritionFormSection: View {
     @Binding var fields: NutritionFields
+    var showSource: Bool = true
 
     var body: some View {
-        Section("Nutrition per 100g") {
+        if showSource && fields.hasValues {
+            Section {
+                HStack {
+                    Label(fields.source.rawValue, systemImage: fields.source.icon)
+                        .font(.subheadline)
+                    Spacer()
+                }
+                .foregroundStyle(.secondary)
+            } header: { Text("Nutrition Source") }
+        }
+        Section("Macronutrients per 100g") {
             NutritionFieldRow(label: "Calories", value: $fields.calories, unit: "kcal")
             NutritionFieldRow(label: "Protein", value: $fields.protein, unit: "g")
             NutritionFieldRow(label: "Carbohydrates", value: $fields.carbohydrates, unit: "g")
@@ -225,7 +274,18 @@ struct NutritionFormSection: View {
             NutritionFieldRow(label: "Fiber", value: $fields.fiber, unit: "g", isSubItem: true)
             NutritionFieldRow(label: "Fat", value: $fields.fat, unit: "g")
             NutritionFieldRow(label: "Saturated Fat", value: $fields.saturatedFat, unit: "g", isSubItem: true)
+            NutritionFieldRow(label: "Omega-3", value: $fields.omega3, unit: "g", isSubItem: true)
+            NutritionFieldRow(label: "Omega-6", value: $fields.omega6, unit: "g", isSubItem: true)
             NutritionFieldRow(label: "Sodium", value: $fields.sodium, unit: "mg")
+        }
+
+        Section("Micronutrients per 100g") {
+            NutritionFieldRow(label: "Vitamin A", value: $fields.vitaminA, unit: "mcg")
+            NutritionFieldRow(label: "Vitamin C", value: $fields.vitaminC, unit: "mg")
+            NutritionFieldRow(label: "Vitamin D", value: $fields.vitaminD, unit: "mcg")
+            NutritionFieldRow(label: "Calcium", value: $fields.calcium, unit: "mg")
+            NutritionFieldRow(label: "Iron", value: $fields.iron, unit: "mg")
+            NutritionFieldRow(label: "Potassium", value: $fields.potassium, unit: "mg")
         }
     }
 }

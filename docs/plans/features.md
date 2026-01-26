@@ -255,6 +255,41 @@ Custom SwiftUI Layout for tag chips.
 
 ## Data Models
 
+### NutritionInfo Fields
+
+All nutrition values are stored per 100g.
+
+**Source Tracking:**
+| Source | Icon | Description |
+|--------|------|-------------|
+| AI Estimate | sparkles | Nutrition estimated by LLM |
+| Label Scan | camera.viewfinder | Extracted from nutrition label image/text |
+| Manual Entry | pencil | Entered manually by user |
+
+**Macronutrients:**
+| Field | Unit | Description |
+|-------|------|-------------|
+| calories | kcal | Energy |
+| protein | g | Protein content |
+| carbohydrates | g | Total carbs |
+| fat | g | Total fat |
+| saturatedFat | g | Saturated fat (sub-fat) |
+| omega3 | g | Omega-3 fatty acids (sub-fat) |
+| omega6 | g | Omega-6 fatty acids (sub-fat) |
+| sugar | g | Total sugars (sub-carb) |
+| fiber | g | Dietary fiber (sub-carb) |
+| sodium | mg | Sodium |
+
+**Micronutrients:**
+| Field | Unit | Description |
+|-------|------|-------------|
+| vitaminA | mcg | Vitamin A |
+| vitaminC | mg | Vitamin C |
+| vitaminD | mcg | Vitamin D |
+| calcium | mg | Calcium |
+| iron | mg | Iron |
+| potassium | mg | Potassium |
+
 ### Core Models
 
 | Model | Purpose | Unique Keys |

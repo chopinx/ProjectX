@@ -49,6 +49,9 @@
 16. Multi-select batch operations for receipt items and Food Bank
 17. Separate AI buttons for category/tags vs nutrition estimation
 18. Tag & Category management view (create, edit, delete tags; view category hierarchy)
+19. Multi-photo nutrition label scanning (capture or select multiple photos, OCR combined)
+20. AI-powered trip item addition (multi-photo, text input, voice input via Speech framework)
+21. AI food matching suggestions when linking items to Food Bank
 
 ---
 
@@ -88,6 +91,10 @@
 | Baby food filter setting | Yes |
 | Manage tags (create, edit, delete) | Yes |
 | View category hierarchy | Yes |
+| Multi-photo nutrition label scan | Yes |
+| Add trip items via AI (photo/text/voice) | Yes |
+| Voice input for item entry | Yes |
+| AI food matching suggestions | Yes |
 
 ---
 
@@ -116,13 +123,20 @@ ProjectX/
 │   └── KeychainHelper.swift
 ├── Views/
 │   ├── Home/
+│   │   ├── TripDetailView.swift
+│   │   ├── ItemEditView.swift
+│   │   └── AddItemsSheet.swift
 │   ├── Scan/
+│   │   ├── NutritionLabelScanView.swift
+│   │   ├── MultiPhotoPicker.swift
+│   │   └── FoodMatchingSheet.swift
 │   ├── FoodBank/
 │   ├── Analysis/
 │   ├── Settings/
 │   │   ├── SettingsView.swift
 │   │   └── FamilyGuideView.swift
 │   └── Components/
+│       └── VoiceInputButton.swift
 ├── ProjectXApp.swift
 └── ContentView.swift
 ```

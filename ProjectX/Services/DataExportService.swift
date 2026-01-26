@@ -119,14 +119,28 @@ struct TagExport: Codable {
 }
 
 struct NutritionExport: Codable {
+    // Original fields (required)
     let calories, protein, carbohydrates, fat, saturatedFat, sugar, fiber, sodium: Double
+    // New fields (optional for backward compatibility with old exports)
+    let source: String?
+    let omega3, omega6: Double?
+    let vitaminA, vitaminC, vitaminD, calcium, iron, potassium: Double?
+
     init(from n: NutritionInfo) {
-        calories = n.calories; protein = n.protein; carbohydrates = n.carbohydrates; fat = n.fat
-        saturatedFat = n.saturatedFat; sugar = n.sugar; fiber = n.fiber; sodium = n.sodium
+        source = n.source.rawValue; calories = n.calories; protein = n.protein; carbohydrates = n.carbohydrates
+        fat = n.fat; saturatedFat = n.saturatedFat; omega3 = n.omega3; omega6 = n.omega6
+        sugar = n.sugar; fiber = n.fiber; sodium = n.sodium
+        vitaminA = n.vitaminA; vitaminC = n.vitaminC; vitaminD = n.vitaminD
+        calcium = n.calcium; iron = n.iron; potassium = n.potassium
     }
+
     func toNutritionInfo() -> NutritionInfo {
-        NutritionInfo(calories: calories, protein: protein, carbohydrates: carbohydrates, fat: fat,
-                      saturatedFat: saturatedFat, sugar: sugar, fiber: fiber, sodium: sodium)
+        NutritionInfo(source: source.flatMap { NutritionSource(rawValue: $0) } ?? .manual,
+                      calories: calories, protein: protein, carbohydrates: carbohydrates,
+                      fat: fat, saturatedFat: saturatedFat, omega3: omega3 ?? 0, omega6: omega6 ?? 0,
+                      sugar: sugar, fiber: fiber, sodium: sodium,
+                      vitaminA: vitaminA ?? 0, vitaminC: vitaminC ?? 0, vitaminD: vitaminD ?? 0,
+                      calcium: calcium ?? 0, iron: iron ?? 0, potassium: potassium ?? 0)
     }
 }
 
