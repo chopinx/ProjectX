@@ -156,7 +156,10 @@ struct TripDetailView: View {
         }
         .sheet(isPresented: $showingAddItemsAI) {
             AddItemsSheet { extracted in
-                for e in extracted { items.append(PurchasedItem(name: e.name, quantity: e.quantityGrams, price: e.price)) }
+                for e in extracted {
+                    let linkedFood = e.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
+                    items.append(PurchasedItem(name: e.name, quantity: e.quantityGrams, price: e.price, food: linkedFood))
+                }
                 showingAddItemsAI = false
             }
         }

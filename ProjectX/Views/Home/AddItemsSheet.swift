@@ -187,7 +187,7 @@ struct AddItemsSheet: View {
             Section("Extracted Items (\(extractedItems.count))") {
                 ForEach(Array(extractedItems.enumerated()), id: \.element.id) { index, item in
                     Button { editingIndex = index } label: {
-                        ExtractedItemRow(item: item)
+                        ExtractedItemRow(item: item, linkedFoodName: foods.first { $0.id == item.linkedFoodId }?.name)
                     }
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -231,6 +231,7 @@ struct AddItemsSheet: View {
             guard let service = LLMServiceFactory.create(settings: settings) else { throw LLMError.invalidAPIKey }
             let receipt = try await service.extractReceipt(from: allText, filterBabyFood: settings.filterBabyFood)
             extractedItems = receipt.items
+            await autoLinkFoods(service: service)
             mode = .review
         } catch let error as LLMError {
             errorMessage = error.errorDescription
@@ -248,6 +249,7 @@ struct AddItemsSheet: View {
             guard let service = LLMServiceFactory.create(settings: settings) else { throw LLMError.invalidAPIKey }
             let receipt = try await service.extractReceipt(from: inputText, filterBabyFood: settings.filterBabyFood)
             extractedItems = receipt.items
+            await autoLinkFoods(service: service)
             mode = .review
         } catch let error as LLMError {
             errorMessage = error.errorDescription
@@ -256,24 +258,57 @@ struct AddItemsSheet: View {
         }
         isExtracting = false
     }
+
+    /// Auto-link extracted items to existing foods if confidence is high enough (>= 0.8)
+    private func autoLinkFoods(service: LLMService) async {
+        guard !foods.isEmpty else { return }
+
+        let foodNames = foods.map { $0.name }
+        let foodLookup = Dictionary(uniqueKeysWithValues: foods.map { ($0.name.lowercased(), $0.id) })
+
+        for i in extractedItems.indices {
+            do {
+                let match = try await service.matchFood(itemName: extractedItems[i].name, existingFoods: foodNames)
+                if !match.isNewFood, match.confidence >= 0.8, let matchedName = match.foodName {
+                    // Find the food ID by name (case-insensitive)
+                    if let foodId = foodLookup[matchedName.lowercased()] {
+                        extractedItems[i].linkedFoodId = foodId
+                    }
+                }
+            } catch {
+                // Silently ignore matching errors - item just won't be auto-linked
+                continue
+            }
+        }
+    }
 }
 
 // MARK: - Extracted Item Row
 
 private struct ExtractedItemRow: View {
     let item: ExtractedReceiptItem
+    var linkedFoodName: String?
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.name).font(.headline)
+                HStack(spacing: 6) {
+                    Text(item.name).font(.headline)
+                    if item.linkedFoodId != nil {
+                        Image(systemName: "link").font(.caption).foregroundStyle(.green)
+                    }
+                }
                 HStack(spacing: 8) {
                     Label("\(Int(item.quantityGrams))g", systemImage: "scalemass")
                     Label(String(format: "%.2f", item.price), systemImage: "dollarsign.circle")
                 }
                 .font(.caption).foregroundStyle(.secondary)
-                Text(item.subcategory ?? item.category)
-                    .font(.caption2).foregroundStyle(.tertiary)
+                if let linkedName = linkedFoodName {
+                    Text("→ \(linkedName)").font(.caption2).foregroundStyle(.green)
+                } else {
+                    Text(item.subcategory ?? item.category)
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)

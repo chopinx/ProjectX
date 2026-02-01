@@ -33,6 +33,7 @@ struct ExtractedReceiptItem: Codable, Identifiable {
     var price: Double
     var category: String
     var subcategory: String?
+    var linkedFoodId: UUID?  // Auto-linked food ID if confidence is high enough
 
     enum CodingKeys: String, CodingKey {
         case name
