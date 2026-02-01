@@ -17,7 +17,7 @@ struct AddItemsSheet: View {
 
     // Review mode state
     @State private var extractedItems: [ExtractedReceiptItem] = []
-    @State private var editingIndex: Int?
+    @State private var editingItem: ExtractedReceiptItem?
 
     enum InputMode { case options, photos, text, review }
 
@@ -67,11 +67,13 @@ struct AddItemsSheet: View {
             .sheet(isPresented: $showPhotoPicker) {
                 MultiPhotoPicker(maxSelection: 10, onImagesPicked: { capturedImages.append(contentsOf: $0); showPhotoPicker = false }, onCancel: { showPhotoPicker = false })
             }
-            .sheet(item: $editingIndex) { index in
+            .sheet(item: $editingItem) { item in
                 NavigationStack {
-                    ExtractedItemEditView(item: extractedItems[index], foods: foods) { updated in
-                        extractedItems[index] = updated
-                        editingIndex = nil
+                    ItemEditView(item: item, foods: foods) { updated in
+                        if let idx = extractedItems.firstIndex(where: { $0.id == item.id }) {
+                            extractedItems[idx] = updated
+                        }
+                        editingItem = nil
                     }
                 }
             }
@@ -185,14 +187,14 @@ struct AddItemsSheet: View {
             }
 
             Section("Extracted Items (\(extractedItems.count))") {
-                ForEach(Array(extractedItems.enumerated()), id: \.element.id) { index, item in
-                    Button { editingIndex = index } label: {
+                ForEach(extractedItems) { item in
+                    Button { editingItem = item } label: {
                         ExtractedItemRow(item: item, linkedFoodName: foods.first { $0.id == item.linkedFoodId }?.name)
                     }
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
-                            extractedItems.remove(at: index)
+                            extractedItems.removeAll { $0.id == item.id }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -217,6 +219,7 @@ struct AddItemsSheet: View {
         .padding()
     }
 
+    @MainActor
     private func extractFromPhotos() async {
         guard !capturedImages.isEmpty else { return }
         isExtracting = true
@@ -241,6 +244,7 @@ struct AddItemsSheet: View {
         isExtracting = false
     }
 
+    @MainActor
     private func extractFromText() async {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         isExtracting = true
@@ -259,7 +263,7 @@ struct AddItemsSheet: View {
         isExtracting = false
     }
 
-    /// Auto-link extracted items to existing foods if confidence is high enough (>= 0.8)
+    @MainActor
     private func autoLinkFoods(service: LLMService) async {
         guard !foods.isEmpty else { return }
 
@@ -270,13 +274,11 @@ struct AddItemsSheet: View {
             do {
                 let match = try await service.matchFood(itemName: extractedItems[i].name, existingFoods: foodNames)
                 if !match.isNewFood, match.confidence >= 0.8, let matchedName = match.foodName {
-                    // Find the food ID by name (case-insensitive)
                     if let foodId = foodLookup[matchedName.lowercased()] {
                         extractedItems[i].linkedFoodId = foodId
                     }
                 }
             } catch {
-                // Silently ignore matching errors - item just won't be auto-linked
                 continue
             }
         }
@@ -317,72 +319,4 @@ private struct ExtractedItemRow: View {
     }
 }
 
-// MARK: - Extracted Item Edit View
 
-private struct ExtractedItemEditView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var name: String
-    @State private var quantity: String
-    @State private var price: String
-    @State private var category: String
-    @State private var subcategory: String?
-
-    private let originalItem: ExtractedReceiptItem
-    private let foods: [Food]
-    private let onSave: (ExtractedReceiptItem) -> Void
-
-    init(item: ExtractedReceiptItem, foods: [Food], onSave: @escaping (ExtractedReceiptItem) -> Void) {
-        self.originalItem = item
-        self.foods = foods
-        self.onSave = onSave
-        _name = State(initialValue: item.name)
-        _quantity = State(initialValue: String(format: "%.0f", item.quantityGrams))
-        _price = State(initialValue: String(format: "%.2f", item.price))
-        _category = State(initialValue: item.category)
-        _subcategory = State(initialValue: item.subcategory)
-    }
-
-    var body: some View {
-        Form {
-            Section("Item Details") {
-                TextField("Name", text: $name)
-                HStack {
-                    TextField("Quantity", text: $quantity).keyboardType(.decimalPad)
-                        .onChange(of: quantity) { _, v in quantity = v.filter { $0.isNumber || $0 == "." } }
-                    Text("g").foregroundStyle(.secondary)
-                }
-                HStack {
-                    TextField("Price", text: $price).keyboardType(.decimalPad)
-                        .onChange(of: price) { _, v in price = v.filter { $0.isNumber || $0 == "." } }
-                }
-            }
-
-            Section("Category") {
-                Text(subcategory ?? category).foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Edit Item")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    guard let qty = Double(quantity), let prc = Double(price) else { return }
-                    var updated = originalItem
-                    updated.name = name
-                    updated.quantityGrams = qty
-                    updated.price = prc
-                    onSave(updated)
-                }
-                .disabled(name.isEmpty || Double(quantity) == nil || Double(price) == nil)
-            }
-        }
-    }
-}
-
-// MARK: - Int Identifiable Extension
-
-extension Int: @retroactive Identifiable {
-    public var id: Int { self }
-}

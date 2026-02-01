@@ -125,8 +125,8 @@ struct ReceiptReviewView: View {
             else { try? await Task.sleep(for: .milliseconds(100)); await vm.extract(); await vm.autoMatch(foods) }
         }
         .onChange(of: phase) { _, p in if p == .background || p == .inactive { vm.toDraft().save() } }
-        .sheet(item: $editing) { i in NavigationStack { ReceiptItemEditSheet(item: i) { vm.update(i, $0); editing = nil } } }
-        .sheet(item: $matching) { i in NavigationStack { FoodMatchingSheet(item: i, foods: foods, currentMatch: vm.foodLinks[i.id]) { vm.link($0, i); matching = nil } } }
+        .sheet(item: $editing) { i in NavigationStack { ItemEditView(item: i, foods: foods) { vm.update(i, $0); editing = nil } } }
+        .sheet(item: $matching) { i in NavigationStack { FoodMatchingView(itemName: i.name, foods: foods, currentMatch: vm.foodLinks[i.id], onSelect: { vm.link($0, i); matching = nil }, suggestedCategory: i.category) } }
         .alert("Save Error", isPresented: $saveError) { Button("OK") {} } message: { Text("Failed to save.") }
         .alert("Remove Item?", isPresented: .init(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) { deleting = nil }
