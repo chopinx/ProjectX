@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct AddItemsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Food.name) private var foods: [Food]
     let onItemsExtracted: ([ExtractedReceiptItem]) -> Void
 
     @State private var mode: InputMode = .options
@@ -13,11 +15,15 @@ struct AddItemsSheet: View {
     @State private var errorMessage: String?
     @State private var settings = AppSettings()
 
-    enum InputMode { case options, photos, text }
+    // Review mode state
+    @State private var extractedItems: [ExtractedReceiptItem] = []
+    @State private var editingIndex: Int?
+
+    enum InputMode { case options, photos, text, review }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            Group {
                 if isExtracting {
                     LoadingStateView(message: "Extracting items...")
                 } else if let error = errorMessage {
@@ -27,14 +33,32 @@ struct AddItemsSheet: View {
                     case .options: optionsView
                     case .photos: photosView
                     case .text: textInputView
+                    case .review: reviewView
                     }
                 }
             }
-            .padding()
-            .navigationTitle("Add Items")
+            .navigationTitle(mode == .review ? "Review Items" : "Add Items")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(mode == .review ? "Back" : "Cancel") {
+                        if mode == .review {
+                            mode = capturedImages.isEmpty ? .text : .photos
+                            extractedItems.removeAll()
+                        } else {
+                            dismiss()
+                        }
+                    }
+                }
+                if mode == .review {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            onItemsExtracted(extractedItems)
+                            dismiss()
+                        }
+                        .disabled(extractedItems.isEmpty)
+                    }
+                }
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraView(sourceType: .camera, onImageCaptured: { capturedImages.append($0); showCamera = false }, onCancel: { showCamera = false })
@@ -42,6 +66,14 @@ struct AddItemsSheet: View {
             }
             .sheet(isPresented: $showPhotoPicker) {
                 MultiPhotoPicker(maxSelection: 10, onImagesPicked: { capturedImages.append(contentsOf: $0); showPhotoPicker = false }, onCancel: { showPhotoPicker = false })
+            }
+            .sheet(item: $editingIndex) { index in
+                NavigationStack {
+                    ExtractedItemEditView(item: extractedItems[index], foods: foods) { updated in
+                        extractedItems[index] = updated
+                        editingIndex = nil
+                    }
+                }
             }
         }
     }
@@ -68,6 +100,7 @@ struct AddItemsSheet: View {
             }.padding(.horizontal, 24)
             Spacer()
         }
+        .padding()
     }
 
     private var photosView: some View {
@@ -116,6 +149,7 @@ struct AddItemsSheet: View {
                 }
             }
         }
+        .padding()
     }
 
     private var textInputView: some View {
@@ -140,6 +174,32 @@ struct AddItemsSheet: View {
                     .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .padding()
+    }
+
+    private var reviewView: some View {
+        List {
+            Section {
+                Text("Tap an item to edit details, link to food, or remove")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Extracted Items (\(extractedItems.count))") {
+                ForEach(Array(extractedItems.enumerated()), id: \.element.id) { index, item in
+                    Button { editingIndex = index } label: {
+                        ExtractedItemRow(item: item)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            extractedItems.remove(at: index)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func errorView(_ message: String) -> some View {
@@ -154,6 +214,7 @@ struct AddItemsSheet: View {
             }
             Spacer()
         }
+        .padding()
     }
 
     private func extractFromPhotos() async {
@@ -169,7 +230,8 @@ struct AddItemsSheet: View {
             }
             guard let service = LLMServiceFactory.create(settings: settings) else { throw LLMError.invalidAPIKey }
             let receipt = try await service.extractReceipt(from: allText, filterBabyFood: settings.filterBabyFood)
-            onItemsExtracted(receipt.items)
+            extractedItems = receipt.items
+            mode = .review
         } catch let error as LLMError {
             errorMessage = error.errorDescription
         } catch {
@@ -185,7 +247,8 @@ struct AddItemsSheet: View {
         do {
             guard let service = LLMServiceFactory.create(settings: settings) else { throw LLMError.invalidAPIKey }
             let receipt = try await service.extractReceipt(from: inputText, filterBabyFood: settings.filterBabyFood)
-            onItemsExtracted(receipt.items)
+            extractedItems = receipt.items
+            mode = .review
         } catch let error as LLMError {
             errorMessage = error.errorDescription
         } catch {
@@ -193,4 +256,98 @@ struct AddItemsSheet: View {
         }
         isExtracting = false
     }
+}
+
+// MARK: - Extracted Item Row
+
+private struct ExtractedItemRow: View {
+    let item: ExtractedReceiptItem
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.name).font(.headline)
+                HStack(spacing: 8) {
+                    Label("\(Int(item.quantityGrams))g", systemImage: "scalemass")
+                    Label(String(format: "%.2f", item.price), systemImage: "dollarsign.circle")
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                Text(item.subcategory ?? item.category)
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Extracted Item Edit View
+
+private struct ExtractedItemEditView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name: String
+    @State private var quantity: String
+    @State private var price: String
+    @State private var category: String
+    @State private var subcategory: String?
+
+    private let originalItem: ExtractedReceiptItem
+    private let foods: [Food]
+    private let onSave: (ExtractedReceiptItem) -> Void
+
+    init(item: ExtractedReceiptItem, foods: [Food], onSave: @escaping (ExtractedReceiptItem) -> Void) {
+        self.originalItem = item
+        self.foods = foods
+        self.onSave = onSave
+        _name = State(initialValue: item.name)
+        _quantity = State(initialValue: String(format: "%.0f", item.quantityGrams))
+        _price = State(initialValue: String(format: "%.2f", item.price))
+        _category = State(initialValue: item.category)
+        _subcategory = State(initialValue: item.subcategory)
+    }
+
+    var body: some View {
+        Form {
+            Section("Item Details") {
+                TextField("Name", text: $name)
+                HStack {
+                    TextField("Quantity", text: $quantity).keyboardType(.decimalPad)
+                        .onChange(of: quantity) { _, v in quantity = v.filter { $0.isNumber || $0 == "." } }
+                    Text("g").foregroundStyle(.secondary)
+                }
+                HStack {
+                    TextField("Price", text: $price).keyboardType(.decimalPad)
+                        .onChange(of: price) { _, v in price = v.filter { $0.isNumber || $0 == "." } }
+                }
+            }
+
+            Section("Category") {
+                Text(subcategory ?? category).foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Edit Item")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    guard let qty = Double(quantity), let prc = Double(price) else { return }
+                    var updated = originalItem
+                    updated.name = name
+                    updated.quantityGrams = qty
+                    updated.price = prc
+                    onSave(updated)
+                }
+                .disabled(name.isEmpty || Double(quantity) == nil || Double(price) == nil)
+            }
+        }
+    }
+}
+
+// MARK: - Int Identifiable Extension
+
+extension Int: @retroactive Identifiable {
+    public var id: Int { self }
 }

@@ -8,10 +8,13 @@ ProjectX is an iOS diet management app built with SwiftUI and SwiftData (iOS 17+
 
 ```bash
 # Build
-xcodebuild build -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild build -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
 
 # Clean build
-xcodebuild clean build -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild clean build -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+
+# Run tests
+xcodebuild test -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:ProjectXTests CODE_SIGNING_ALLOWED=NO
 ```
 
 ## Project Structure
@@ -43,8 +46,9 @@ ProjectX/
 ├── Views/
 │   ├── Home/
 │   │   ├── HomeView.swift     # Dashboard with trips and nutrition summary
-│   │   ├── TripDetailView.swift # Trip details with purchased items
-│   │   └── ItemEditView.swift # Edit purchased item
+│   │   ├── TripDetailView.swift # Trip details with purchased items, sorting, summary
+│   │   ├── ItemEditView.swift # Edit purchased item with AI food matching
+│   │   └── AddItemsSheet.swift # AI-powered item addition (photo/text/voice) with review flow
 │   ├── FoodBank/
 │   │   ├── FoodBankView.swift # Food library with filtering
 │   │   └── FoodDetailView.swift # Create/edit food
@@ -55,8 +59,9 @@ ProjectX/
 │   │   ├── ReceiptItemRow.swift # Display extracted item
 │   │   ├── ReceiptItemEditSheet.swift # Edit extracted item
 │   │   ├── FoodMatchingSheet.swift # Link item to food
-│   │   ├── NutritionLabelScanView.swift # Scan nutrition label
-│   │   └── NutritionLabelResultView.swift # Display scanned nutrition
+│   │   ├── NutritionLabelScanView.swift # Scan nutrition label (multi-photo support)
+│   │   ├── NutritionLabelResultView.swift # Display scanned nutrition
+│   │   └── MultiPhotoPicker.swift # PHPickerViewController wrapper for multiple photos
 │   ├── Analysis/
 │   │   └── AnalysisView.swift # Nutrition analysis dashboard
 │   ├── Settings/
@@ -69,7 +74,8 @@ ProjectX/
 │       ├── TagPicker.swift    # Tag selection with flow layout
 │       ├── CategoryPicker.swift # Category hierarchy picker
 │       ├── NutritionFieldRow.swift # Nutrition input field
-│       └── TextInputSheet.swift # Generic text input modal
+│       ├── TextInputSheet.swift # Generic text input modal
+│       └── VoiceInputButton.swift # Speech-to-text button (iOS Speech framework)
 ├── Theme/
 │   └── AppTheme.swift         # Colors, fonts, design tokens
 └── Utils/
@@ -162,6 +168,19 @@ private let segmentOverlap: CGFloat = 200
 
 // Split image into overlapping segments, OCR each, deduplicate at boundaries
 ```
+
+## Change Checklist
+
+Before completing any code change, go through this checklist:
+
+1. **Build success** - Run `xcodebuild build -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO`
+2. **Test pass** - Run `xcodebuild test -scheme ProjectX -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:ProjectXTests CODE_SIGNING_ALLOWED=NO`
+3. **Code simplify** - Review for unnecessary complexity, extract helpers if needed
+4. **Code quality** - Check naming, structure, SwiftUI patterns
+5. **Docs update** - Update PRD (`docs/plans/2025-01-24-mvp-projectx.md`) if features changed
+6. **Update CLAUDE.md** - Add new patterns, files, or gotchas discovered
+
+---
 
 ## Style Guidelines
 

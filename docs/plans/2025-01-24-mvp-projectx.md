@@ -52,6 +52,8 @@
 19. Multi-photo nutrition label scanning (capture or select multiple photos, OCR combined)
 20. AI-powered trip item addition (multi-photo, text input, voice input via Speech framework)
 21. AI food matching suggestions when linking items to Food Bank
+22. Review/edit flow after AI extraction (review each item before adding to trip)
+23. LLM weight estimation based on typical package sizes when weight not on receipt
 
 ---
 
@@ -95,6 +97,8 @@
 | Add trip items via AI (photo/text/voice) | Yes |
 | Voice input for item entry | Yes |
 | AI food matching suggestions | Yes |
+| Review extracted items before adding | Yes |
+| LLM estimates weight from package info | Yes |
 
 ---
 

@@ -59,7 +59,19 @@ enum LLMPrompts {
 
     private static let receiptFieldRules = """
         - name: translate to English if needed
-        - quantity_grams: convert all units to grams (1kg=1000, 500ml=500, estimate pieces)
+        - quantity_grams: ALWAYS provide weight in grams. Convert units (1kg=1000g, 500ml≈500g for liquids).
+          If weight not shown, ESTIMATE based on typical package sizes:
+          * Milk/juice carton: 1000g, small bottle: 500g
+          * Bread loaf: 400-500g, baguette: 250g
+          * Eggs (dozen): 600g, (6-pack): 300g
+          * Cheese block: 200-400g, sliced: 150g
+          * Meat/fish package: 300-500g
+          * Canned goods: 400g, small can: 200g
+          * Fresh produce: apple 180g, banana 120g, orange 200g
+          * Yogurt: 125-150g per cup, large tub: 500g
+          * Cereal box: 300-500g
+          * Pasta/rice bag: 500g or 1000g
+          * Snacks/chips: 150-200g
         - price: number without currency symbol
         """
 
