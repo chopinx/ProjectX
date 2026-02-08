@@ -30,6 +30,11 @@ final class OpenAIService: LLMService {
         return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
     }
 
+    func extractReceipt(fromPDF data: Data, filterBabyFood: Bool) async throws -> ExtractedReceipt {
+        guard let image = PDFHelper.extractImage(from: data) else { throw LLMError.invalidResponse }
+        return try await extractReceipt(from: image, filterBabyFood: filterBabyFood)
+    }
+
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition {
         let response = try await sendVisionRequest(prompt: LLMPrompts.nutritionLabelImagePrompt, image: image)
         return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
@@ -38,6 +43,11 @@ final class OpenAIService: LLMService {
     func extractNutritionLabel(from text: String) async throws -> ExtractedNutrition {
         let response = try await sendTextRequest(prompt: LLMPrompts.nutritionLabelTextPrompt(text))
         return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
+    func extractNutritionLabel(fromPDF data: Data) async throws -> ExtractedNutrition {
+        guard let image = PDFHelper.extractImage(from: data) else { throw LLMError.invalidResponse }
+        return try await extractNutritionLabel(from: image)
     }
 
     func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition {

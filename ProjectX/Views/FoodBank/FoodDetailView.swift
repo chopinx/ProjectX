@@ -49,6 +49,19 @@ struct FoodDetailView: View {
         _nutrition = State(initialValue: NutritionFields())
     }
 
+    /// Init for creating new food with pre-populated nutrition (from scan or AI estimation)
+    init(name: String, category: FoodCategory, nutrition: NutritionInfo?, settings: AppSettings) {
+        self.existingFood = nil
+        self.settings = settings
+        self.onSave = nil
+        self.autoSuggest = false
+        _name = State(initialValue: name)
+        _category = State(initialValue: category)
+        _selectedTags = State(initialValue: [])
+        _isPantryStaple = State(initialValue: false)
+        _nutrition = State(initialValue: NutritionFields(from: nutrition))
+    }
+
     var body: some View {
         Form {
             Section("Basic Info") {

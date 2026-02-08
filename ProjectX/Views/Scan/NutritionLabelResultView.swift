@@ -4,6 +4,7 @@ import SwiftData
 enum NutritionLabelSource {
     case image(UIImage)
     case text(String)
+    case pdf(Data)
 }
 
 struct NutritionLabelResultView: View {
@@ -27,6 +28,11 @@ struct NutritionLabelResultView: View {
 
     init(text: String, settings: AppSettings) {
         self.source = .text(text)
+        self.settings = settings
+    }
+
+    init(pdfData: Data, settings: AppSettings) {
+        self.source = .pdf(pdfData)
         self.settings = settings
     }
 
@@ -115,6 +121,8 @@ struct NutritionLabelResultView: View {
                 extractedNutrition = try await service.extractNutritionLabel(from: image)
             case .text(let text):
                 extractedNutrition = try await service.extractNutritionLabel(from: text)
+            case .pdf(let data):
+                extractedNutrition = try await service.extractNutritionLabel(fromPDF: data)
             }
         } catch let error as LLMError {
             errorMessage = error.errorDescription

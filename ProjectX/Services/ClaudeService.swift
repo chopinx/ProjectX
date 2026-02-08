@@ -30,6 +30,11 @@ final class ClaudeService: LLMService {
         return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
     }
 
+    func extractReceipt(fromPDF data: Data, filterBabyFood: Bool) async throws -> ExtractedReceipt {
+        let response = try await sendPDFRequest(prompt: LLMPrompts.receiptImagePrompt(filterBabyFood: filterBabyFood), pdfData: data)
+        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
+    }
+
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition {
         let response = try await sendVisionRequest(prompt: LLMPrompts.nutritionLabelImagePrompt, image: image)
         return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
@@ -37,6 +42,11 @@ final class ClaudeService: LLMService {
 
     func extractNutritionLabel(from text: String) async throws -> ExtractedNutrition {
         let response = try await sendTextRequest(prompt: LLMPrompts.nutritionLabelTextPrompt(text))
+        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
+    func extractNutritionLabel(fromPDF data: Data) async throws -> ExtractedNutrition {
+        let response = try await sendPDFRequest(prompt: LLMPrompts.nutritionLabelImagePrompt, pdfData: data)
         return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
     }
 
@@ -69,13 +79,22 @@ final class ClaudeService: LLMService {
 
     private func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {
         let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+        return try await sendDocumentRequest(prompt: prompt, base64: base64, mediaType: "image/jpeg")
+    }
+
+    private func sendPDFRequest(prompt: String, pdfData: Data) async throws -> String {
+        let base64 = pdfData.base64EncodedString()
+        return try await sendDocumentRequest(prompt: prompt, base64: base64, mediaType: "application/pdf")
+    }
+
+    private func sendDocumentRequest(prompt: String, base64: String, mediaType: String) async throws -> String {
         let body: [String: Any] = [
             "model": model.rawValue,
             "max_tokens": 4096,
             "messages": [[
                 "role": "user",
                 "content": [
-                    ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": base64]],
+                    ["type": "document" as Any, "source": ["type": "base64", "media_type": mediaType, "data": base64]],
                     ["type": "text", "text": prompt]
                 ]
             ]]

@@ -84,6 +84,28 @@ struct MealDetailView: View {
         _items = State(initialValue: meal?.items ?? [])
     }
 
+    /// Initialize with pre-populated items for a new meal (from import/scan)
+    init(items: [MealItem], date: Date? = nil, profile: Profile?, settings: AppSettings) {
+        self.existingMeal = nil
+        self.profile = profile
+        self.settings = settings
+        let mealDate = date ?? .now
+        _date = State(initialValue: mealDate)
+        _mealType = State(initialValue: Self.suggestMealType(for: mealDate))
+        _notes = State(initialValue: "")
+        _items = State(initialValue: items)
+    }
+
+    private static func suggestMealType(for date: Date = .now) -> MealType {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<11: return .breakfast
+        case 11..<15: return .lunch
+        case 15..<18: return .snack
+        default: return .dinner
+        }
+    }
+
     var body: some View {
         Form {
             // Quick Actions + Summary

@@ -13,6 +13,7 @@ final class ScanFlowManager {
     // Pending data - stored as base64 for images to survive app backgrounding
     var pendingOCRText: String?
     var pendingImageData: Data?
+    var pendingPDFData: Data?
     private var pendingImageTimestamp: Date?
     private let imageExpirationInterval: TimeInterval = 300 // 5 minutes
 
@@ -62,11 +63,23 @@ final class ScanFlowManager {
         showNutritionFromText = true
     }
 
+    func startReceiptReview(pdfData: Data, settings: AppSettings) {
+        pendingPDFData = pdfData
+        activeReceiptViewModel = ReceiptReviewViewModel(source: .pdf(pdfData), settings: settings)
+        showReviewFromText = true
+    }
+
+    func startNutritionReview(pdfData: Data) {
+        pendingPDFData = pdfData
+        showNutritionFromText = true
+    }
+
     func clearReviewState() {
         showReviewFromText = false
         showNutritionFromText = false
         pendingOCRText = nil
         pendingImageData = nil
+        pendingPDFData = nil
         pendingImageTimestamp = nil
         activeReceiptViewModel = nil
         activeNutritionText = nil

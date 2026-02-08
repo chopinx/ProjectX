@@ -45,12 +45,14 @@ struct ExtractedReceiptItem: Codable, Identifiable {
 }
 
 struct ExtractedNutrition: Decodable {
+    var foodName: String?  // Extracted from nutrition labels
     var calories, protein, carbohydrates, fat, saturatedFat: Double
     var omega3, omega6, sugar, fiber, sodium: Double
     var vitaminA, vitaminC, vitaminD, calcium, iron, potassium: Double
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        foodName = try? c.decodeIfPresent(String.self, forKey: .foodName)
         func d(_ key: CodingKeys) -> Double { (try? c.decodeIfPresent(Double.self, forKey: key)) ?? 0 }
         calories = d(.calories); protein = d(.protein); carbohydrates = d(.carbohydrates)
         fat = d(.fat); saturatedFat = d(.saturatedFat); omega3 = d(.omega3); omega6 = d(.omega6)
@@ -60,6 +62,7 @@ struct ExtractedNutrition: Decodable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case foodName = "food_name"
         case calories, protein, carbohydrates, fat, saturatedFat, omega3, omega6
         case sugar, fiber, sodium, vitaminA, vitaminC, vitaminD, calcium, iron, potassium
     }
@@ -126,11 +129,17 @@ protocol LLMService {
     /// Extract items and store name from receipt text (copy-pasted or typed)
     func extractReceipt(from text: String, filterBabyFood: Bool) async throws -> ExtractedReceipt
 
+    /// Extract items and store name from a PDF receipt
+    func extractReceipt(fromPDF data: Data, filterBabyFood: Bool) async throws -> ExtractedReceipt
+
     /// Extract nutrition info from a nutrition label image
     func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition
 
     /// Extract nutrition info from nutrition label text (copy-pasted or typed)
     func extractNutritionLabel(from text: String) async throws -> ExtractedNutrition
+
+    /// Extract nutrition info from a PDF nutrition label
+    func extractNutritionLabel(fromPDF data: Data) async throws -> ExtractedNutrition
 
     /// Estimate nutrition for a food item by name
     func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition

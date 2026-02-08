@@ -37,12 +37,13 @@ enum QuickAddMode: Int {
 
 struct QuickAddSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Profile.createdAt) private var profiles: [Profile]
     @Query(sort: \Food.name) private var foods: [Food]
     @Bindable var settings: AppSettings
     let mode: QuickAddMode
     let onScanPhoto: () -> Void
+    let onTripItems: ((_ items: [PurchasedItem], _ storeName: String?, _ date: Date?) -> Void)?
+    let onMealItems: ((_ items: [MealItem], _ date: Date?) -> Void)?
+    let onFoodData: ((_ name: String, _ category: FoodCategory, _ nutrition: NutritionInfo?) -> Void)?
 
     @State private var isProcessing = false
     @State private var processingMessage = ""
@@ -51,19 +52,22 @@ struct QuickAddSheet: View {
     @State private var showingFilePicker = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
 
-    private var activeProfile: Profile? {
-        profiles.first { $0.id == settings.activeProfileId }
+    init(settings: AppSettings, mode: QuickAddMode, onScanPhoto: @escaping () -> Void,
+         onTripItems: ((_ items: [PurchasedItem], _ storeName: String?, _ date: Date?) -> Void)? = nil,
+         onMealItems: ((_ items: [MealItem], _ date: Date?) -> Void)? = nil,
+         onFoodData: ((_ name: String, _ category: FoodCategory, _ nutrition: NutritionInfo?) -> Void)? = nil) {
+        self._settings = Bindable(wrappedValue: settings)
+        self.mode = mode
+        self.onScanPhoto = onScanPhoto
+        self.onTripItems = onTripItems
+        self.onMealItems = onMealItems
+        self.onFoodData = onFoodData
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            // Header
-            header
-                .padding(.top, 16)
-
-            // Action buttons
-            actionButtons
-                .padding(.bottom, 24)
+            header.padding(.top, 16)
+            actionButtons.padding(.bottom, 24)
         }
         .frame(height: 220)
         .background(Color(.systemGroupedBackground))
@@ -127,7 +131,6 @@ struct QuickAddSheet: View {
 
     private var actionButtons: some View {
         HStack(spacing: 24) {
-            // Camera button (left)
             ActionCircleButton(
                 icon: "camera.fill",
                 label: "Camera",
@@ -138,13 +141,10 @@ struct QuickAddSheet: View {
                 onScanPhoto()
             }
 
-            // Mic button (center, primary)
             HoldToSpeakButton(
                 mode: mode,
                 settings: settings,
-                context: context,
                 foods: foods,
-                activeProfile: activeProfile,
                 onProcessing: { message in
                     processingMessage = message
                     isProcessing = true
@@ -153,13 +153,22 @@ struct QuickAddSheet: View {
                     isProcessing = false
                     if let error = error {
                         errorMessage = error
-                    } else {
-                        dismiss()
                     }
+                },
+                onTripItems: { items, storeName, date in
+                    onTripItems?(items, storeName, date)
+                    dismiss()
+                },
+                onMealItems: { items, date in
+                    onMealItems?(items, date)
+                    dismiss()
+                },
+                onFoodData: { name, category, nutrition in
+                    onFoodData?(name, category, nutrition)
+                    dismiss()
                 }
             )
 
-            // More button (right) with menu
             Menu {
                 Button {
                     showingPhotoPicker = true
@@ -189,6 +198,40 @@ struct QuickAddSheet: View {
         }
     }
 
+    // MARK: - Dispatch Helper
+
+    /// Dispatch extracted receipt to the appropriate callback based on mode
+    private func dispatchReceipt(_ receipt: ExtractedReceipt, service: LLMService) async {
+        guard !receipt.items.isEmpty else {
+            errorMessage = "Couldn't identify any items"
+            return
+        }
+        switch mode {
+        case .trip:
+            onTripItems?(mapToTripItems(receipt.items, foods: foods), receipt.storeName, receipt.parsedDate)
+            dismiss()
+        case .meal:
+            onMealItems?(mapToMealItems(receipt.items, foods: foods), receipt.parsedDate)
+            dismiss()
+        case .food:
+            if let first = receipt.items.first {
+                do {
+                    let (name, category, nutrition) = try await prepareFoodData(from: first.name, service: service)
+                    onFoodData?(name, category, nutrition)
+                    dismiss()
+                } catch {
+                    errorMessage = "Failed to process food: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func dispatchNutrition(_ nutrition: ExtractedNutrition) {
+        let nutritionInfo = NutritionInfo(from: nutrition, source: .labelScan)
+        onFoodData?(extractedFoodName(from: nutrition), .other, nutritionInfo)
+        dismiss()
+    }
+
     // MARK: - Actions
 
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
@@ -205,7 +248,7 @@ struct QuickAddSheet: View {
             return
         }
 
-        var allItems: [ExtractedReceiptItem] = []
+        var mergedReceipt = ExtractedReceipt(storeName: nil, receiptDate: nil, items: [])
         var failedCount = 0
         var loadFailedCount = 0
 
@@ -218,50 +261,23 @@ struct QuickAddSheet: View {
                     continue
                 }
                 let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
-                allItems.append(contentsOf: receipt.items)
+                mergedReceipt.items.append(contentsOf: receipt.items)
+                if mergedReceipt.storeName == nil { mergedReceipt.storeName = receipt.storeName }
+                if mergedReceipt.receiptDate == nil { mergedReceipt.receiptDate = receipt.receiptDate }
             } catch {
                 failedCount += 1
             }
         }
 
-        // Show error if all photos failed
         let totalFailed = failedCount + loadFailedCount
-        if allItems.isEmpty {
-            if totalFailed > 0 {
-                errorMessage = "Failed to process \(totalFailed) photo\(totalFailed == 1 ? "" : "s")"
-            } else {
-                errorMessage = "Couldn't identify any items"
-            }
+        if mergedReceipt.items.isEmpty {
+            errorMessage = totalFailed > 0
+                ? "Failed to process \(totalFailed) photo\(totalFailed == 1 ? "" : "s")"
+                : "Couldn't identify any items"
             return
         }
 
-        // Create trip or meal with extracted items
-        switch mode {
-        case .trip:
-            createTrip(with: allItems)
-        case .meal:
-            createMeal(with: allItems)
-        case .food:
-            // For food mode, just create the first item as a food
-            if let first = allItems.first {
-                do {
-                    try await createFood(from: first.name, service: service)
-                } catch {
-                    errorMessage = "Failed to create food: \(error.localizedDescription)"
-                    return
-                }
-            }
-        }
-
-        do {
-            try context.save()
-            if totalFailed > 0 {
-                errorMessage = "Added \(allItems.count) items. \(totalFailed) photo\(totalFailed == 1 ? "" : "s") failed."
-            }
-            dismiss()
-        } catch {
-            errorMessage = "Failed to save: \(error.localizedDescription)"
-        }
+        await dispatchReceipt(mergedReceipt, service: service)
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
@@ -292,130 +308,39 @@ struct QuickAddSheet: View {
 
         do {
             let ext = url.pathExtension.lowercased()
-            var image: UIImage?
 
             if ext == "pdf" {
                 guard let pdfData = try? Data(contentsOf: url) else {
                     errorMessage = "Failed to read PDF file"
                     return
                 }
-                image = extractImageFromPDF(pdfData)
-            } else if ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) {
-                guard let data = try? Data(contentsOf: url) else {
-                    errorMessage = "Failed to read image file"
-                    return
+                if mode == .food {
+                    dispatchNutrition(try await service.extractNutritionLabel(fromPDF: pdfData))
+                } else {
+                    let receipt = try await service.extractReceipt(fromPDF: pdfData, filterBabyFood: settings.filterBabyFood)
+                    await dispatchReceipt(receipt, service: service)
                 }
-                image = UIImage(data: data)
+                return
             }
 
-            guard let img = image else {
+            guard ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) else {
                 errorMessage = "Unsupported file type"
                 return
             }
 
-            switch mode {
-            case .trip:
-                let receipt = try await service.extractReceipt(from: img, filterBabyFood: settings.filterBabyFood)
-                guard !receipt.items.isEmpty else {
-                    errorMessage = "Couldn't identify any items"
-                    return
-                }
-                createTrip(with: receipt.items)
-
-            case .meal:
-                let receipt = try await service.extractReceipt(from: img, filterBabyFood: settings.filterBabyFood)
-                guard !receipt.items.isEmpty else {
-                    errorMessage = "Couldn't identify any food items"
-                    return
-                }
-                createMeal(with: receipt.items)
-
-            case .food:
-                let nutrition = try await service.extractNutritionLabel(from: img)
-                let nutritionInfo = NutritionInfo(from: nutrition, source: .labelScan)
-                let food = Food(name: "Scanned Food", category: .other, nutrition: nutritionInfo, tags: [], isPantryStaple: false)
-                context.insert(food)
+            guard let data = try? Data(contentsOf: url), let img = UIImage(data: data) else {
+                errorMessage = "Failed to read image file"
+                return
             }
 
-            try context.save()
-            dismiss()
+            if mode == .food {
+                dispatchNutrition(try await service.extractNutritionLabel(from: img))
+            } else {
+                let receipt = try await service.extractReceipt(from: img, filterBabyFood: settings.filterBabyFood)
+                await dispatchReceipt(receipt, service: service)
+            }
         } catch {
             errorMessage = "Failed to process: \(error.localizedDescription)"
-        }
-    }
-
-    private func extractImageFromPDF(_ data: Data) -> UIImage? {
-        guard let provider = CGDataProvider(data: data as CFData),
-              let pdfDoc = CGPDFDocument(provider),
-              let page = pdfDoc.page(at: 1) else { return nil }
-
-        let pageRect = page.getBoxRect(.mediaBox)
-        let scale: CGFloat = 2.0
-        let size = CGSize(width: pageRect.width * scale, height: pageRect.height * scale)
-
-        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
-        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
-
-        ctx.setFillColor(UIColor.white.cgColor)
-        ctx.fill(CGRect(origin: .zero, size: size))
-        ctx.translateBy(x: 0, y: size.height)
-        ctx.scaleBy(x: scale, y: -scale)
-        ctx.drawPDFPage(page)
-
-        let image = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return image
-    }
-
-    private func createTrip(with items: [ExtractedReceiptItem]) {
-        let trip = GroceryTrip(date: .now)
-        trip.profile = activeProfile
-        context.insert(trip)
-
-        for item in items {
-            let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-            let purchasedItem = PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: linkedFood)
-            purchasedItem.trip = trip
-            trip.items.append(purchasedItem)
-        }
-    }
-
-    private func createMeal(with items: [ExtractedReceiptItem]) {
-        let meal = Meal(date: .now, mealType: suggestMealType())
-        meal.profile = activeProfile
-        context.insert(meal)
-
-        for item in items {
-            let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-            let mealItem = MealItem(name: item.name, quantity: item.quantityGrams, food: linkedFood)
-            mealItem.meal = meal
-            meal.items.append(mealItem)
-        }
-    }
-
-    private func createFood(from text: String, service: LLMService) async throws {
-        let foodName = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let suggestion = try await service.suggestCategoryAndTags(for: foodName, availableTags: [])
-        let nutrition = try await service.estimateNutrition(for: foodName, category: suggestion.category)
-
-        var category = FoodCategory.other
-        if let main = FoodMainCategory(rawValue: suggestion.category) {
-            let sub = suggestion.subcategory.flatMap { s in main.subcategories.first { $0.rawValue == s } }
-            category = FoodCategory(main: main, sub: sub)
-        }
-
-        let nutritionInfo = NutritionInfo(from: nutrition, source: .aiEstimate)
-        let food = Food(name: foodName, category: category, nutrition: nutritionInfo, tags: [], isPantryStaple: false)
-        context.insert(food)
-    }
-
-    private func suggestMealType() -> MealType {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<11: return .breakfast
-        case 11..<15: return .lunch
-        case 15..<18: return .snack
-        default: return .dinner
         }
     }
 }
@@ -454,11 +379,12 @@ private struct ActionCircleButton: View {
 private struct HoldToSpeakButton: View {
     let mode: QuickAddMode
     let settings: AppSettings
-    let context: ModelContext
     let foods: [Food]
-    let activeProfile: Profile?
     let onProcessing: (String) -> Void
     let onComplete: (String?) -> Void
+    let onTripItems: ((_ items: [PurchasedItem], _ storeName: String?, _ date: Date?) -> Void)?
+    let onMealItems: ((_ items: [MealItem], _ date: Date?) -> Void)?
+    let onFoodData: ((_ name: String, _ category: FoodCategory, _ nutrition: NutritionInfo?) -> Void)?
 
     @State private var isRecording = false
     @State private var permissionDenied = false
@@ -618,82 +544,92 @@ private struct HoldToSpeakButton: View {
 
         do {
             switch mode {
-            case .trip:
+            case .trip, .meal:
                 let receipt = try await service.extractReceipt(from: text, filterBabyFood: settings.filterBabyFood)
                 guard !receipt.items.isEmpty else {
                     onComplete("Couldn't identify any items")
                     return
                 }
-                createTrip(with: receipt.items)
-
-            case .meal:
-                let receipt = try await service.extractReceipt(from: text, filterBabyFood: settings.filterBabyFood)
-                guard !receipt.items.isEmpty else {
-                    onComplete("Couldn't identify any food items")
-                    return
+                onComplete(nil)
+                if mode == .trip {
+                    onTripItems?(mapToTripItems(receipt.items, foods: foods), receipt.storeName, receipt.parsedDate)
+                } else {
+                    onMealItems?(mapToMealItems(receipt.items, foods: foods), receipt.parsedDate)
                 }
-                createMeal(with: receipt.items)
 
             case .food:
-                try await createFood(from: text, service: service)
+                let (foodName, category, nutrition) = try await prepareFoodData(from: text, service: service)
+                onComplete(nil)
+                onFoodData?(foodName, category, nutrition)
             }
-
-            try context.save()
-            onComplete(nil)
         } catch {
             onComplete("Failed to process: \(error.localizedDescription)")
         }
     }
+}
 
-    private func createTrip(with items: [ExtractedReceiptItem]) {
-        let trip = GroceryTrip(date: .now)
-        trip.profile = activeProfile
-        context.insert(trip)
+// MARK: - Shared Helpers
 
-        for item in items {
-            let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-            let purchasedItem = PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: linkedFood)
-            purchasedItem.trip = trip
-            trip.items.append(purchasedItem)
+/// Extract the food name from an ExtractedNutrition, falling back to "Scanned Food"
+func extractedFoodName(from nutrition: ExtractedNutrition) -> String {
+    if let name = nutrition.foodName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+        return name
+    }
+    return "Scanned Food"
+}
+
+/// Find the best matching food for an item name using local string matching
+func findMatchingFood(for itemName: String, in foods: [Food]) -> Food? {
+    let nameLower = itemName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !nameLower.isEmpty else { return nil }
+
+    // Exact match
+    if let food = foods.first(where: { $0.name.lowercased() == nameLower }) {
+        return food
+    }
+
+    // Best substring match with length-ratio threshold
+    var bestMatch: (food: Food, score: Double)?
+    for food in foods {
+        let foodLower = food.name.lowercased()
+        if nameLower.contains(foodLower) || foodLower.contains(nameLower) {
+            let shorter = Double(min(nameLower.count, foodLower.count))
+            let longer = Double(max(nameLower.count, foodLower.count))
+            let score = shorter / longer
+            if score > (bestMatch?.score ?? 0) {
+                bestMatch = (food, score)
+            }
         }
     }
 
-    private func createMeal(with items: [ExtractedReceiptItem]) {
-        let meal = Meal(date: .now, mealType: suggestMealType())
-        meal.profile = activeProfile
-        context.insert(meal)
+    return bestMatch?.score ?? 0 >= 0.6 ? bestMatch?.food : nil
+}
 
-        for item in items {
-            let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-            let mealItem = MealItem(name: item.name, quantity: item.quantityGrams, food: linkedFood)
-            mealItem.meal = meal
-            meal.items.append(mealItem)
-        }
+func mapToTripItems(_ extracted: [ExtractedReceiptItem], foods: [Food]) -> [PurchasedItem] {
+    extracted.map { item in
+        let linkedFood = findMatchingFood(for: item.name, in: foods)
+        return PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: linkedFood)
+    }
+}
+
+func mapToMealItems(_ extracted: [ExtractedReceiptItem], foods: [Food]) -> [MealItem] {
+    extracted.map { item in
+        let linkedFood = findMatchingFood(for: item.name, in: foods)
+        return MealItem(name: item.name, quantity: item.quantityGrams, food: linkedFood)
+    }
+}
+
+private func prepareFoodData(from text: String, service: LLMService) async throws -> (String, FoodCategory, NutritionInfo?) {
+    let foodName = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let suggestion = try await service.suggestCategoryAndTags(for: foodName, availableTags: [])
+    let nutrition = try await service.estimateNutrition(for: foodName, category: suggestion.category)
+
+    var category = FoodCategory.other
+    if let main = FoodMainCategory(rawValue: suggestion.category) {
+        let sub = suggestion.subcategory.flatMap { s in main.subcategories.first { $0.rawValue == s } }
+        category = FoodCategory(main: main, sub: sub)
     }
 
-    private func createFood(from text: String, service: LLMService) async throws {
-        let foodName = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let suggestion = try await service.suggestCategoryAndTags(for: foodName, availableTags: [])
-        let nutrition = try await service.estimateNutrition(for: foodName, category: suggestion.category)
-
-        var category = FoodCategory.other
-        if let main = FoodMainCategory(rawValue: suggestion.category) {
-            let sub = suggestion.subcategory.flatMap { s in main.subcategories.first { $0.rawValue == s } }
-            category = FoodCategory(main: main, sub: sub)
-        }
-
-        let nutritionInfo = NutritionInfo(from: nutrition, source: .aiEstimate)
-        let food = Food(name: foodName, category: category, nutrition: nutritionInfo, tags: [], isPantryStaple: false)
-        context.insert(food)
-    }
-
-    private func suggestMealType() -> MealType {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<11: return .breakfast
-        case 11..<15: return .lunch
-        case 15..<18: return .snack
-        default: return .dinner
-        }
-    }
+    let nutritionInfo = NutritionInfo(from: nutrition, source: .aiEstimate)
+    return (foodName, category, nutritionInfo)
 }

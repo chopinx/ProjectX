@@ -16,6 +16,7 @@ struct ScanView: View {
     @State private var receiptText = ""
     @State private var pendingOCRText: String?
     @State private var pendingImage: UIImage?
+    @State private var pendingPDF: Data?
     @State private var isProcessing = false
     @State private var errorMessage: String?
 
@@ -75,7 +76,10 @@ struct ScanView: View {
                 ScanTypeSelectionSheet(
                     onSelect: { type in
                         flowManager.showScanTypeSelection = false
-                        if let image = pendingImage {
+                        if let pdf = pendingPDF {
+                            if type == .receipt { flowManager.startReceiptReview(pdfData: pdf, settings: settings) }
+                            else { flowManager.startNutritionReview(pdfData: pdf) }
+                        } else if let image = pendingImage {
                             if type == .receipt { flowManager.startReceiptReview(image: image, settings: settings) }
                             else { flowManager.startNutritionReview(image: image) }
                         } else if let text = pendingOCRText {
@@ -83,7 +87,7 @@ struct ScanView: View {
                             else { flowManager.startNutritionReview(text: text) }
                         }
                     },
-                    onCancel: { flowManager.showScanTypeSelection = false; pendingOCRText = nil }
+                    onCancel: { flowManager.showScanTypeSelection = false; pendingOCRText = nil; pendingPDF = nil }
                 ).presentationDetents([.medium])
             }
             .navigationDestination(isPresented: Binding(get: { flowManager.showReviewFromText }, set: { flowManager.showReviewFromText = $0 })) {
@@ -92,7 +96,9 @@ struct ScanView: View {
                 }
             }
             .navigationDestination(isPresented: Binding(get: { flowManager.showNutritionFromText }, set: { flowManager.showNutritionFromText = $0 })) {
-                if let image = flowManager.getPendingImage() {
+                if let pdf = flowManager.pendingPDFData {
+                    NutritionLabelResultView(pdfData: pdf, settings: settings)
+                } else if let image = flowManager.getPendingImage() {
                     NutritionLabelResultView(image: image, settings: settings)
                 } else if let text = flowManager.activeNutritionText {
                     NutritionLabelResultView(text: text, settings: settings)
@@ -153,11 +159,11 @@ struct ScanView: View {
     private func handleDocumentPicked(_ url: URL) {
         let ext = url.pathExtension.lowercased()
         if ext == "pdf" {
-            guard let data = try? Data(contentsOf: url), let image = extractImageFromPDF(data) else {
+            guard let data = try? Data(contentsOf: url) else {
                 errorMessage = "Failed to read PDF file"
                 return
             }
-            processImage(image)
+            processPDF(data)
         } else if ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) {
             guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
                 errorMessage = "Failed to read image file"
@@ -171,6 +177,7 @@ struct ScanView: View {
 
     private func processImage(_ image: UIImage) {
         pendingImage = image
+        pendingPDF = nil
         if let mode = initialMode {
             if mode == .receipt { flowManager.startReceiptReview(image: image, settings: settings) }
             else { flowManager.startNutritionReview(image: image) }
@@ -179,27 +186,15 @@ struct ScanView: View {
         }
     }
 
-    private func extractImageFromPDF(_ data: Data) -> UIImage? {
-        guard let provider = CGDataProvider(data: data as CFData),
-              let pdfDoc = CGPDFDocument(provider),
-              let page = pdfDoc.page(at: 1) else { return nil }
-
-        let pageRect = page.getBoxRect(.mediaBox)
-        let scale: CGFloat = 2.0
-        let size = CGSize(width: pageRect.width * scale, height: pageRect.height * scale)
-
-        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
-        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
-
-        ctx.setFillColor(UIColor.white.cgColor)
-        ctx.fill(CGRect(origin: .zero, size: size))
-        ctx.translateBy(x: 0, y: size.height)
-        ctx.scaleBy(x: scale, y: -scale)
-        ctx.drawPDFPage(page)
-
-        let image = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return image
+    private func processPDF(_ data: Data) {
+        pendingPDF = data
+        pendingImage = nil
+        if let mode = initialMode {
+            if mode == .receipt { flowManager.startReceiptReview(pdfData: data, settings: settings) }
+            else { flowManager.startNutritionReview(pdfData: data) }
+        } else {
+            flowManager.showScanTypeSelection = true
+        }
     }
 }
 

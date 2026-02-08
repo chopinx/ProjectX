@@ -13,10 +13,28 @@ struct ContentView: View {
     @State private var showingDirectCamera = false
     @State private var directCameraMode: QuickAddMode?
     @State private var pendingImportImage: UIImage?
+    @State private var pendingImportPDF: Data?
     @State private var showReviewFromImport = false
     @State private var showNutritionFromImport = false
     @State private var isProcessingImport = false
     @State private var importError: String?
+
+    // Edit view states for QuickAdd flow
+    @State private var pendingTripItems: [PurchasedItem] = []
+    @State private var pendingTripStoreName: String?
+    @State private var pendingTripDate: Date?
+    @State private var pendingMealItems: [MealItem] = []
+    @State private var pendingMealDate: Date?
+    @State private var pendingFoodData: (name: String, category: FoodCategory, nutrition: NutritionInfo?)?
+    @State private var showingTripEdit = false
+    @State private var showingMealEdit = false
+    @State private var showingFoodEdit = false
+
+    @Query(sort: \Profile.createdAt) private var profiles: [Profile]
+
+    private var activeProfile: Profile? {
+        profiles.first { $0.id == settings.activeProfileId }
+    }
 
     private var quickAddMode: QuickAddMode? {
         QuickAddMode(rawValue: selectedTab)
@@ -49,13 +67,29 @@ struct ContentView: View {
             CameraView(sourceType: .camera, onImageCaptured: handleDirectCameraCapture, onCancel: { showingDirectCamera = false })
                 .ignoresSafeArea()
         }
-        .sheet(isPresented: $showingAddOptions) {
+        .sheet(isPresented: $showingAddOptions, onDismiss: presentPendingEditView) {
             if let mode = quickAddMode {
-                QuickAddSheet(settings: settings, mode: mode, onScanPhoto: {
-                    showingAddOptions = false
-                    directCameraMode = mode
-                    showingDirectCamera = true
-                })
+                QuickAddSheet(
+                    settings: settings,
+                    mode: mode,
+                    onScanPhoto: {
+                        showingAddOptions = false
+                        directCameraMode = mode
+                        showingDirectCamera = true
+                    },
+                    onTripItems: { items, storeName, date in
+                        pendingTripItems = items
+                        pendingTripStoreName = storeName
+                        pendingTripDate = date
+                    },
+                    onMealItems: { items, date in
+                        pendingMealItems = items
+                        pendingMealDate = date
+                    },
+                    onFoodData: { name, category, nutrition in
+                        pendingFoodData = (name, category, nutrition)
+                    }
+                )
                 .presentationDetents([.height(240)])
             }
         }
@@ -63,13 +97,38 @@ struct ContentView: View {
             importTypeSheet
         }
         .fullScreenCover(isPresented: $showReviewFromImport) {
-            if let image = pendingImportImage { NavigationStack { ReceiptReviewView(image: image, settings: settings) } }
+            if let pdf = pendingImportPDF {
+                NavigationStack { ReceiptReviewView(pdfData: pdf, settings: settings) }
+            } else if let image = pendingImportImage {
+                NavigationStack { ReceiptReviewView(image: image, settings: settings) }
+            }
         }
         .fullScreenCover(isPresented: $showNutritionFromImport) {
-            if let image = pendingImportImage { NavigationStack { NutritionLabelResultView(image: image, settings: settings) } }
+            if let pdf = pendingImportPDF {
+                NavigationStack { NutritionLabelResultView(pdfData: pdf, settings: settings) }
+            } else if let image = pendingImportImage {
+                NavigationStack { NutritionLabelResultView(image: image, settings: settings) }
+            }
+        }
+        .fullScreenCover(isPresented: $showingTripEdit, onDismiss: clearPendingTripData) {
+            NavigationStack {
+                TripDetailView(items: pendingTripItems, storeName: pendingTripStoreName, date: pendingTripDate, profile: activeProfile, settings: settings)
+            }
+        }
+        .fullScreenCover(isPresented: $showingMealEdit, onDismiss: clearPendingMealData) {
+            NavigationStack {
+                MealDetailView(items: pendingMealItems, date: pendingMealDate, profile: activeProfile, settings: settings)
+            }
+        }
+        .fullScreenCover(isPresented: $showingFoodEdit, onDismiss: { pendingFoodData = nil }) {
+            if let data = pendingFoodData {
+                NavigationStack {
+                    FoodDetailView(name: data.name, category: data.category, nutrition: data.nutrition, settings: settings)
+                }
+            }
         }
         .overlay { if isProcessingImport { processingOverlay } }
-        .alert("Error", isPresented: .constant(importError != nil)) { Button("OK") { importError = nil } } message: { Text(importError ?? "") }
+        .alert("Error", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) { Button("OK") { importError = nil } } message: { Text(importError ?? "") }
         .onChange(of: scanFlowManager.requestScanTab) { _, request in
             if request { showingScan = true; scanFlowManager.requestScanTab = false }
         }
@@ -113,6 +172,27 @@ struct ContentView: View {
         try? context.save()
     }
 
+    private func presentPendingEditView() {
+        if !pendingTripItems.isEmpty {
+            showingTripEdit = true
+        } else if !pendingMealItems.isEmpty {
+            showingMealEdit = true
+        } else if pendingFoodData != nil {
+            showingFoodEdit = true
+        }
+    }
+
+    private func clearPendingTripData() {
+        pendingTripItems = []
+        pendingTripStoreName = nil
+        pendingTripDate = nil
+    }
+
+    private func clearPendingMealData() {
+        pendingMealItems = []
+        pendingMealDate = nil
+    }
+
     private var floatingAddButton: some View {
         Button { showingAddOptions = true } label: {
             Circle().fill(Color.themePrimary).frame(width: 56, height: 56)
@@ -153,88 +233,37 @@ struct ContentView: View {
                 return
             }
 
+            let foodDescriptor = FetchDescriptor<Food>(sortBy: [SortDescriptor(\.name)])
+            let foods = (try? context.fetch(foodDescriptor)) ?? []
+
             do {
                 switch mode {
-                case .trip:
+                case .trip, .meal:
                     let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
                     guard !receipt.items.isEmpty else {
                         importError = "Couldn't identify any items"
                         return
                     }
-                    createTrip(with: receipt.items)
-
-                case .meal:
-                    let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
-                    guard !receipt.items.isEmpty else {
-                        importError = "Couldn't identify any food items"
-                        return
+                    if mode == .trip {
+                        pendingTripItems = mapToTripItems(receipt.items, foods: foods)
+                        pendingTripStoreName = receipt.storeName
+                        pendingTripDate = receipt.parsedDate
+                        showingTripEdit = true
+                    } else {
+                        pendingMealItems = mapToMealItems(receipt.items, foods: foods)
+                        pendingMealDate = receipt.parsedDate
+                        showingMealEdit = true
                     }
-                    createMeal(with: receipt.items)
 
                 case .food:
                     let nutrition = try await service.extractNutritionLabel(from: image)
-                    createFood(with: nutrition)
+                    pendingFoodData = (extractedFoodName(from: nutrition), .other, NutritionInfo(from: nutrition, source: .labelScan))
+                    showingFoodEdit = true
                 }
-
-                try context.save()
             } catch {
                 importError = "Failed to process: \(error.localizedDescription)"
             }
         }
-    }
-
-    private func createTrip(with items: [ExtractedReceiptItem]) {
-        let descriptor = FetchDescriptor<Profile>(sortBy: [SortDescriptor(\.createdAt)])
-        let profiles = (try? context.fetch(descriptor)) ?? []
-        let activeProfile = profiles.first { $0.id == settings.activeProfileId }
-
-        let foodDescriptor = FetchDescriptor<Food>(sortBy: [SortDescriptor(\.name)])
-        let foods = (try? context.fetch(foodDescriptor)) ?? []
-
-        let trip = GroceryTrip(date: .now)
-        trip.profile = activeProfile
-        context.insert(trip)
-
-        for item in items {
-            let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-            let purchasedItem = PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: linkedFood)
-            purchasedItem.trip = trip
-            trip.items.append(purchasedItem)
-        }
-    }
-
-    private func createMeal(with items: [ExtractedReceiptItem]) {
-        let descriptor = FetchDescriptor<Profile>(sortBy: [SortDescriptor(\.createdAt)])
-        let profiles = (try? context.fetch(descriptor)) ?? []
-        let activeProfile = profiles.first { $0.id == settings.activeProfileId }
-
-        let foodDescriptor = FetchDescriptor<Food>(sortBy: [SortDescriptor(\.name)])
-        let foods = (try? context.fetch(foodDescriptor)) ?? []
-
-        let hour = Calendar.current.component(.hour, from: Date())
-        let mealType: MealType = switch hour {
-            case 5..<11: .breakfast
-            case 11..<15: .lunch
-            case 15..<18: .snack
-            default: .dinner
-        }
-
-        let meal = Meal(date: .now, mealType: mealType)
-        meal.profile = activeProfile
-        context.insert(meal)
-
-        for item in items {
-            let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-            let mealItem = MealItem(name: item.name, quantity: item.quantityGrams, food: linkedFood)
-            mealItem.meal = meal
-            meal.items.append(mealItem)
-        }
-    }
-
-    private func createFood(with nutrition: ExtractedNutrition) {
-        let nutritionInfo = NutritionInfo(from: nutrition, source: .labelScan)
-        let food = Food(name: "Scanned Food", category: .other, nutrition: nutritionInfo, tags: [], isPantryStaple: false)
-        context.insert(food)
     }
 
     private func processImportedContent(type: ScanView.ScanType) async {
@@ -242,48 +271,21 @@ struct ContentView: View {
         isProcessingImport = true
         defer { isProcessingImport = false; importManager.pendingImport = nil }
 
-        // Convert source to UIImage
-        let image: UIImage?
+        // Clear previous state
+        pendingImportImage = nil
+        pendingImportPDF = nil
+
         switch source {
         case .image(let img):
-            image = img
+            pendingImportImage = img
         case .pdf(let data):
-            image = extractImageFromPDF(data)
+            pendingImportPDF = data  // Keep PDF data for direct LLM processing
         case .text:
             importError = "Text import not supported in this flow"
             return
         }
 
-        guard let img = image else {
-            importError = "Failed to process image"
-            return
-        }
-
-        pendingImportImage = img
         selectedTab = 2  // Navigate to Foods tab
         if type == .receipt { showReviewFromImport = true } else { showNutritionFromImport = true }
-    }
-
-    private func extractImageFromPDF(_ data: Data) -> UIImage? {
-        guard let provider = CGDataProvider(data: data as CFData),
-              let pdfDoc = CGPDFDocument(provider),
-              let page = pdfDoc.page(at: 1) else { return nil }
-
-        let pageRect = page.getBoxRect(.mediaBox)
-        let scale: CGFloat = 2.0
-        let size = CGSize(width: pageRect.width * scale, height: pageRect.height * scale)
-
-        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
-        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
-
-        ctx.setFillColor(UIColor.white.cgColor)
-        ctx.fill(CGRect(origin: .zero, size: size))
-        ctx.translateBy(x: 0, y: size.height)
-        ctx.scaleBy(x: scale, y: -scale)
-        ctx.drawPDFPage(page)
-
-        let image = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return image
     }
 }

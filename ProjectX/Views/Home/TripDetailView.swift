@@ -85,6 +85,16 @@ struct TripDetailView: View {
         _items = State(initialValue: trip?.items ?? [])
     }
 
+    /// Initialize with pre-populated items for a new trip (from import/scan)
+    init(items: [PurchasedItem], storeName: String? = nil, date: Date? = nil, profile: Profile?, settings: AppSettings) {
+        self.existingTrip = nil
+        self.profile = profile
+        self.settings = settings
+        _date = State(initialValue: date ?? .now)
+        _storeName = State(initialValue: storeName ?? "")
+        _items = State(initialValue: items)
+    }
+
     var body: some View {
         Form {
             // Quick Actions + Summary

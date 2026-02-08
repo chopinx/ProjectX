@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-enum ReceiptSource { case image(UIImage), text(String) }
+enum ReceiptSource { case image(UIImage), text(String), pdf(Data) }
 struct SuggestedMatch: Equatable { let food: Food; let confidence: Double }
 
 // MARK: - Draft
@@ -39,7 +39,11 @@ final class ReceiptReviewViewModel {
         do {
             let r: ExtractedReceipt
             let filter = settings.filterBabyFood
-            switch source { case .image(let img): r = try await svc.extractReceipt(from: img, filterBabyFood: filter); case .text(let txt): r = try await svc.extractReceipt(from: txt, filterBabyFood: filter) }
+            switch source {
+            case .image(let img): r = try await svc.extractReceipt(from: img, filterBabyFood: filter)
+            case .text(let txt): r = try await svc.extractReceipt(from: txt, filterBabyFood: filter)
+            case .pdf(let data): r = try await svc.extractReceipt(fromPDF: data, filterBabyFood: filter)
+            }
             extractedItems = r.items
             if let n = r.storeName, !n.isEmpty { storeName = n }
             if let d = r.parsedDate { tripDate = d }
@@ -109,6 +113,7 @@ struct ReceiptReviewView: View {
     init(viewModel: ReceiptReviewViewModel, onDismiss: @escaping () -> Void) { _vm = State(initialValue: viewModel); self.onDismiss = onDismiss }
     init(text: String, settings: AppSettings) { _vm = State(initialValue: ReceiptReviewViewModel(source: .text(text), settings: settings)); onDismiss = nil }
     init(image: UIImage, settings: AppSettings) { _vm = State(initialValue: ReceiptReviewViewModel(source: .image(image), settings: settings)); onDismiss = nil }
+    init(pdfData: Data, settings: AppSettings) { _vm = State(initialValue: ReceiptReviewViewModel(source: .pdf(pdfData), settings: settings)); onDismiss = nil }
 
     var body: some View {
         Group {

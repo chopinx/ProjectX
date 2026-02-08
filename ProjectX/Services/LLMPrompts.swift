@@ -125,7 +125,7 @@ enum LLMPrompts {
     // MARK: - Nutrition Prompts
 
     private static let nutritionJSON = """
-        {"calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"omega3":0,"omega6":0,"sugar":0,"fiber":0,"sodium":0,"vitaminA":0,"vitaminC":0,"vitaminD":0,"calcium":0,"iron":0,"potassium":0}
+        {"food_name":"Product Name","calories":0,"protein":0,"carbohydrates":0,"fat":0,"saturatedFat":0,"omega3":0,"omega6":0,"sugar":0,"fiber":0,"sodium":0,"vitaminA":0,"vitaminC":0,"vitaminD":0,"calcium":0,"iron":0,"potassium":0}
         """
 
     private static let nutritionFieldRules = """
@@ -136,18 +136,20 @@ enum LLMPrompts {
         """
 
     static let nutritionLabelImagePrompt = """
-        Extract nutrition values from this nutrition label image. Convert to per 100g.
+        Extract the food/product name and nutrition values from this nutrition label image. Convert to per 100g.
 
         Required JSON structure:
         \(nutritionJSON)
 
+        Field rules:
+        - food_name: the product or food name visible on the label/packaging, or "Unknown Food" if not visible
         \(nutritionFieldRules)
         \(strictOutputRules)
         """
 
     static func nutritionLabelTextPrompt(_ text: String) -> String {
         """
-        Extract nutrition values from this text. Convert to per 100g.
+        Extract the food/product name and nutrition values from this text. Convert to per 100g.
 
         Nutrition label text:
         \(text)
@@ -155,6 +157,8 @@ enum LLMPrompts {
         Required JSON structure:
         \(nutritionJSON)
 
+        Field rules:
+        - food_name: the product or food name from the text, or "Unknown Food" if not found
         \(nutritionFieldRules)
         \(strictOutputRules)
         """
@@ -167,6 +171,8 @@ enum LLMPrompts {
         Required JSON structure:
         \(nutritionJSON)
 
+        Field rules:
+        - food_name: "\(foodName)"
         \(nutritionFieldRules)
         \(strictOutputRules)
         """
