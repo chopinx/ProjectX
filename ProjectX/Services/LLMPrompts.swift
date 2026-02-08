@@ -172,6 +172,48 @@ enum LLMPrompts {
         """
     }
 
+    /// Prompt for filling only empty nutrition fields while considering existing values
+    static func fillEmptyNutritionPrompt(
+        foodName: String,
+        category: String,
+        tags: [String],
+        existingNutrition: [String: Double]
+    ) -> String {
+        let tagList = tags.isEmpty ? "none" : tags.joined(separator: ", ")
+        let existingValues = existingNutrition
+            .filter { $0.value > 0 }
+            .map { "\($0.key): \($0.value)" }
+            .sorted()
+            .joined(separator: ", ")
+
+        let existingSection = existingValues.isEmpty ? "None provided yet." : existingValues
+
+        return """
+        Estimate missing nutrition values for this food item. ONLY provide values for fields that are empty/zero.
+
+        Food information:
+        - Name: \(foodName)
+        - Category: \(category)
+        - Tags: \(tagList)
+
+        Existing nutrition values (per 100g) - DO NOT CHANGE THESE:
+        \(existingSection)
+
+        IMPORTANT RULES:
+        1. Your estimates must be CONSISTENT with the existing values above
+        2. If existing values suggest a certain food profile (e.g., high protein suggests meat/dairy), align your estimates accordingly
+        3. Ensure macros (protein + carbs + fat) roughly add up to a sensible total with existing values
+        4. If existing calories are provided, ensure your macro estimates would approximately match that calorie count
+        5. Provide reasonable estimates for ALL fields in the JSON structure
+
+        Required JSON structure:
+        \(nutritionJSON)
+
+        \(nutritionFieldRules)
+        \(strictOutputRules)
+        """
+    }
+
     // MARK: - Category and Tags Suggestion Prompt
 
     static func suggestCategoryAndTagsPrompt(foodName: String, availableTags: [String]) -> String {

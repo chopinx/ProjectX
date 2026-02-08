@@ -8,6 +8,7 @@ struct FoodMatchingView: View {
     let itemName: String
     let foods: [Food]
     let currentMatch: Food?
+    let settings: AppSettings
     let onSelect: (Food?) -> Void
     var suggestedCategory: String = "other"
 
@@ -16,7 +17,6 @@ struct FoodMatchingView: View {
     @State private var isLoading = true
     @State private var showingNewFood = false
     @State private var searchText = ""
-    @State private var settings = AppSettings()
 
     private var filtered: [Food] {
         searchText.isEmpty ? foods : foods.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
@@ -68,7 +68,7 @@ struct FoodMatchingView: View {
         .task { selectedFood = currentMatch; await findSuggestion() }
         .sheet(isPresented: $showingNewFood) {
             NavigationStack {
-                FoodDetailView(suggestedName: itemName, suggestedCategory: suggestedCategory) { newFood in
+                FoodDetailView(suggestedName: itemName, suggestedCategory: suggestedCategory, settings: settings) { newFood in
                     selectedFood = newFood
                     showingNewFood = false
                 }

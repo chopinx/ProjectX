@@ -179,6 +179,8 @@ struct NutritionFields {
     var calcium = ""
     var iron = ""
     var potassium = ""
+    // Track which fields were filled by AI
+    var aiFilledFields: Set<String> = []
 
     var hasValues: Bool { !calories.isEmpty }
 
@@ -205,8 +207,16 @@ struct NutritionFields {
         potassium = n.potassium > 0 ? String(format: "%.1f", n.potassium) : ""
     }
 
+    /// Check if a field is empty or zero
+    private func isEmpty(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || (Double(trimmed) ?? 0) == 0
+    }
+
+    /// Populate all fields (replaces existing values)
     mutating func populate(from nutrition: ExtractedNutrition, source newSource: NutritionSource) {
         source = newSource
+        aiFilledFields.removeAll()
         calories = String(format: "%.1f", nutrition.calories)
         protein = String(format: "%.1f", nutrition.protein)
         carbohydrates = String(format: "%.1f", nutrition.carbohydrates)
@@ -223,6 +233,51 @@ struct NutritionFields {
         calcium = String(format: "%.1f", nutrition.calcium)
         iron = String(format: "%.1f", nutrition.iron)
         potassium = String(format: "%.1f", nutrition.potassium)
+    }
+
+    /// Populate only empty/zero fields, keeping existing values
+    mutating func populateEmptyOnly(from n: ExtractedNutrition, source newSource: NutritionSource) {
+        var filled: Set<String> = []
+
+        if isEmpty(calories) && n.calories > 0 { calories = String(format: "%.1f", n.calories); filled.insert("calories") }
+        if isEmpty(protein) && n.protein > 0 { protein = String(format: "%.1f", n.protein); filled.insert("protein") }
+        if isEmpty(carbohydrates) && n.carbohydrates > 0 { carbohydrates = String(format: "%.1f", n.carbohydrates); filled.insert("carbohydrates") }
+        if isEmpty(fat) && n.fat > 0 { fat = String(format: "%.1f", n.fat); filled.insert("fat") }
+        if isEmpty(saturatedFat) && n.saturatedFat > 0 { saturatedFat = String(format: "%.1f", n.saturatedFat); filled.insert("saturatedFat") }
+        if isEmpty(omega3) && n.omega3 > 0 { omega3 = String(format: "%.1f", n.omega3); filled.insert("omega3") }
+        if isEmpty(omega6) && n.omega6 > 0 { omega6 = String(format: "%.1f", n.omega6); filled.insert("omega6") }
+        if isEmpty(sugar) && n.sugar > 0 { sugar = String(format: "%.1f", n.sugar); filled.insert("sugar") }
+        if isEmpty(fiber) && n.fiber > 0 { fiber = String(format: "%.1f", n.fiber); filled.insert("fiber") }
+        if isEmpty(sodium) && n.sodium > 0 { sodium = String(format: "%.1f", n.sodium); filled.insert("sodium") }
+        if isEmpty(vitaminA) && n.vitaminA > 0 { vitaminA = String(format: "%.1f", n.vitaminA); filled.insert("vitaminA") }
+        if isEmpty(vitaminC) && n.vitaminC > 0 { vitaminC = String(format: "%.1f", n.vitaminC); filled.insert("vitaminC") }
+        if isEmpty(vitaminD) && n.vitaminD > 0 { vitaminD = String(format: "%.1f", n.vitaminD); filled.insert("vitaminD") }
+        if isEmpty(calcium) && n.calcium > 0 { calcium = String(format: "%.1f", n.calcium); filled.insert("calcium") }
+        if isEmpty(iron) && n.iron > 0 { iron = String(format: "%.1f", n.iron); filled.insert("iron") }
+        if isEmpty(potassium) && n.potassium > 0 { potassium = String(format: "%.1f", n.potassium); filled.insert("potassium") }
+
+        if !filled.isEmpty { source = newSource; aiFilledFields = filled }
+    }
+
+    /// Clear AI filled status for a specific field (when user edits it)
+    mutating func clearAIFilled(_ key: String) {
+        aiFilledFields.remove(key)
+    }
+
+    /// Get existing non-empty values as dictionary for LLM context
+    func toExistingValuesDictionary() -> [String: Double] {
+        let fields: [(String, String)] = [
+            ("calories", calories), ("protein", protein), ("carbohydrates", carbohydrates),
+            ("fat", fat), ("saturatedFat", saturatedFat), ("omega3", omega3), ("omega6", omega6),
+            ("sugar", sugar), ("fiber", fiber), ("sodium", sodium),
+            ("vitaminA", vitaminA), ("vitaminC", vitaminC), ("vitaminD", vitaminD),
+            ("calcium", calcium), ("iron", iron), ("potassium", potassium)
+        ]
+        var dict: [String: Double] = [:]
+        for (key, value) in fields {
+            if let v = Double(value), v > 0 { dict[key] = v }
+        }
+        return dict
     }
 
     func toNutritionInfo() -> NutritionInfo {
@@ -266,26 +321,57 @@ struct NutritionFormSection: View {
                 .foregroundStyle(.secondary)
             } header: { Text("Nutrition Source") }
         }
+        if !fields.aiFilledFields.isEmpty {
+            Section {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(Color.themePrimary)
+                    Text("Fields marked with")
+                    Image(systemName: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(Color.themePrimary)
+                    Text("were filled by AI")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
         Section("Macronutrients per 100g") {
-            NutritionFieldRow(label: "Calories", value: $fields.calories, unit: "kcal")
-            NutritionFieldRow(label: "Protein", value: $fields.protein, unit: "g")
-            NutritionFieldRow(label: "Carbohydrates", value: $fields.carbohydrates, unit: "g")
-            NutritionFieldRow(label: "Sugar", value: $fields.sugar, unit: "g", isSubItem: true)
-            NutritionFieldRow(label: "Fiber", value: $fields.fiber, unit: "g", isSubItem: true)
-            NutritionFieldRow(label: "Fat", value: $fields.fat, unit: "g")
-            NutritionFieldRow(label: "Saturated Fat", value: $fields.saturatedFat, unit: "g", isSubItem: true)
-            NutritionFieldRow(label: "Omega-3", value: $fields.omega3, unit: "g", isSubItem: true)
-            NutritionFieldRow(label: "Omega-6", value: $fields.omega6, unit: "g", isSubItem: true)
-            NutritionFieldRow(label: "Sodium", value: $fields.sodium, unit: "mg")
+            NutritionFieldRow(label: "Calories", value: $fields.calories, unit: "kcal",
+                              isAIFilled: fields.aiFilledFields.contains("calories")) { fields.clearAIFilled("calories") }
+            NutritionFieldRow(label: "Protein", value: $fields.protein, unit: "g",
+                              isAIFilled: fields.aiFilledFields.contains("protein")) { fields.clearAIFilled("protein") }
+            NutritionFieldRow(label: "Carbohydrates", value: $fields.carbohydrates, unit: "g",
+                              isAIFilled: fields.aiFilledFields.contains("carbohydrates")) { fields.clearAIFilled("carbohydrates") }
+            NutritionFieldRow(label: "Sugar", value: $fields.sugar, unit: "g", isSubItem: true,
+                              isAIFilled: fields.aiFilledFields.contains("sugar")) { fields.clearAIFilled("sugar") }
+            NutritionFieldRow(label: "Fiber", value: $fields.fiber, unit: "g", isSubItem: true,
+                              isAIFilled: fields.aiFilledFields.contains("fiber")) { fields.clearAIFilled("fiber") }
+            NutritionFieldRow(label: "Fat", value: $fields.fat, unit: "g",
+                              isAIFilled: fields.aiFilledFields.contains("fat")) { fields.clearAIFilled("fat") }
+            NutritionFieldRow(label: "Saturated Fat", value: $fields.saturatedFat, unit: "g", isSubItem: true,
+                              isAIFilled: fields.aiFilledFields.contains("saturatedFat")) { fields.clearAIFilled("saturatedFat") }
+            NutritionFieldRow(label: "Omega-3", value: $fields.omega3, unit: "g", isSubItem: true,
+                              isAIFilled: fields.aiFilledFields.contains("omega3")) { fields.clearAIFilled("omega3") }
+            NutritionFieldRow(label: "Omega-6", value: $fields.omega6, unit: "g", isSubItem: true,
+                              isAIFilled: fields.aiFilledFields.contains("omega6")) { fields.clearAIFilled("omega6") }
+            NutritionFieldRow(label: "Sodium", value: $fields.sodium, unit: "mg",
+                              isAIFilled: fields.aiFilledFields.contains("sodium")) { fields.clearAIFilled("sodium") }
         }
 
         Section("Micronutrients per 100g") {
-            NutritionFieldRow(label: "Vitamin A", value: $fields.vitaminA, unit: "mcg")
-            NutritionFieldRow(label: "Vitamin C", value: $fields.vitaminC, unit: "mg")
-            NutritionFieldRow(label: "Vitamin D", value: $fields.vitaminD, unit: "mcg")
-            NutritionFieldRow(label: "Calcium", value: $fields.calcium, unit: "mg")
-            NutritionFieldRow(label: "Iron", value: $fields.iron, unit: "mg")
-            NutritionFieldRow(label: "Potassium", value: $fields.potassium, unit: "mg")
+            NutritionFieldRow(label: "Vitamin A", value: $fields.vitaminA, unit: "mcg",
+                              isAIFilled: fields.aiFilledFields.contains("vitaminA")) { fields.clearAIFilled("vitaminA") }
+            NutritionFieldRow(label: "Vitamin C", value: $fields.vitaminC, unit: "mg",
+                              isAIFilled: fields.aiFilledFields.contains("vitaminC")) { fields.clearAIFilled("vitaminC") }
+            NutritionFieldRow(label: "Vitamin D", value: $fields.vitaminD, unit: "mcg",
+                              isAIFilled: fields.aiFilledFields.contains("vitaminD")) { fields.clearAIFilled("vitaminD") }
+            NutritionFieldRow(label: "Calcium", value: $fields.calcium, unit: "mg",
+                              isAIFilled: fields.aiFilledFields.contains("calcium")) { fields.clearAIFilled("calcium") }
+            NutritionFieldRow(label: "Iron", value: $fields.iron, unit: "mg",
+                              isAIFilled: fields.aiFilledFields.contains("iron")) { fields.clearAIFilled("iron") }
+            NutritionFieldRow(label: "Potassium", value: $fields.potassium, unit: "mg",
+                              isAIFilled: fields.aiFilledFields.contains("potassium")) { fields.clearAIFilled("potassium") }
         }
     }
 }

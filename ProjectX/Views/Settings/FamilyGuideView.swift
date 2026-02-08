@@ -15,6 +15,8 @@ struct FamilyGuideView: View {
 
     private let titles = ["Members", "Activity", "Review", "Generate", "Adjust"]
 
+    private var activeProfileId: UUID? { settings.activeProfileId }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -41,7 +43,13 @@ struct FamilyGuideView: View {
 
     private func loadMembers() {
         guard members.isEmpty else { return }
-        members = settings.familyMembers.isEmpty ? [FamilyMember(name: "Member 1")] : settings.familyMembers
+        let existingMembers: [FamilyMember]
+        if let profileId = activeProfileId {
+            existingMembers = settings.familyMembers(for: profileId)
+        } else {
+            existingMembers = settings.familyMembers
+        }
+        members = existingMembers.isEmpty ? [FamilyMember(name: "Member 1")] : existingMembers
         for m in members {
             activitySelections[m.id] = m.activityLevel
             dietSelections[m.id] = m.dietType
@@ -78,7 +86,7 @@ struct FamilyGuideView: View {
 
     private var membersView: some View {
         List {
-            Section("Household") {
+            Section("Members") {
                 ForEach(members) { m in
                     HStack {
                         VStack(alignment: .leading) {
@@ -209,9 +217,18 @@ struct FamilyGuideView: View {
     }
 
     private func save() {
-        settings.familyMembers = finalMembers()
-        settings.dailyNutritionTarget = editedTarget ?? suggestion?.toNutritionTarget() ?? .default
-        settings.hasCompletedFamilyGuide = true
+        let finalTarget = editedTarget ?? suggestion?.toNutritionTarget() ?? .default
+        let finalMembersList = finalMembers()
+
+        if let profileId = activeProfileId {
+            settings.setFamilyMembers(finalMembersList, for: profileId)
+            settings.setNutritionTarget(finalTarget, for: profileId)
+            settings.setHasCompletedFamilyGuide(true, for: profileId)
+        } else {
+            settings.familyMembers = finalMembersList
+            settings.dailyNutritionTarget = finalTarget
+            settings.hasCompletedFamilyGuide = true
+        }
         dismiss()
     }
 }

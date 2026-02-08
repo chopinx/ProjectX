@@ -13,6 +13,8 @@ final class ScanFlowManager {
     // Pending data - stored as base64 for images to survive app backgrounding
     var pendingOCRText: String?
     var pendingImageData: Data?
+    private var pendingImageTimestamp: Date?
+    private let imageExpirationInterval: TimeInterval = 300 // 5 minutes
 
     // Active view model to preserve edit state
     var activeReceiptViewModel: ReceiptReviewViewModel?
@@ -20,11 +22,22 @@ final class ScanFlowManager {
 
     func setPendingImage(_ image: UIImage) {
         pendingImageData = image.jpegData(compressionQuality: 0.8)
+        pendingImageTimestamp = Date()
     }
 
     func getPendingImage() -> UIImage? {
+        cleanupExpiredImageIfNeeded()
         guard let data = pendingImageData else { return nil }
         return UIImage(data: data)
+    }
+
+    /// Clears pending image data if it's older than the expiration interval
+    func cleanupExpiredImageIfNeeded() {
+        guard let timestamp = pendingImageTimestamp else { return }
+        if Date().timeIntervalSince(timestamp) > imageExpirationInterval {
+            pendingImageData = nil
+            pendingImageTimestamp = nil
+        }
     }
 
     func startReceiptReview(text: String, settings: AppSettings) {
@@ -44,11 +57,17 @@ final class ScanFlowManager {
         showNutritionFromText = true
     }
 
+    func startNutritionReview(image: UIImage) {
+        setPendingImage(image)
+        showNutritionFromText = true
+    }
+
     func clearReviewState() {
         showReviewFromText = false
         showNutritionFromText = false
         pendingOCRText = nil
         pendingImageData = nil
+        pendingImageTimestamp = nil
         activeReceiptViewModel = nil
         activeNutritionText = nil
     }

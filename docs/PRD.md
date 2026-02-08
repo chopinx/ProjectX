@@ -376,16 +376,58 @@ protocol NutritionEstimator {
 - lowSodium
 ```
 
+### Profile
+```
+- id: UUID
+- name: String (e.g., "Dad", "Mom", "Kids")
+- iconName: String (SF Symbol name)
+- colorHex: String (hex color code)
+- isDefault: Bool
+- createdAt: Date
+```
+
+### Meal
+```
+- id: UUID
+- date: Date
+- mealType: MealType (breakfast, lunch, dinner, snack)
+- notes: String?
+- items: [MealItem]
+- profile: Profile (optional, for profile isolation)
+- createdAt: Date
+- updatedAt: Date
+```
+
+### MealItem
+```
+- id: UUID
+- name: String (as extracted/edited)
+- quantity: Double (always in grams)
+- food: Food? (link to food bank, nil if not linked)
+- meal: Meal
+- isSkipped: Bool
+```
+
+### MealType (enum)
+```
+- breakfast (icon: sunrise.fill)
+- lunch (icon: sun.max.fill)
+- dinner (icon: moon.stars.fill)
+- snack (icon: carrot.fill)
+```
+
 ---
 
 ## User Interface
 
 ### Tab Bar Structure
-1. **Home** - Dashboard with recent trips, quick weekly stats
-2. **Scan** - Camera/photo picker for receipts
-3. **Food Bank** - Browse, search, manage foods
-4. **Analysis** - Charts and trends
-5. **Settings** - API keys, preferences
+1. **Trips** - Dashboard with recent grocery trips, quick stats
+2. **Meals** - Meal tracking with breakfast/lunch/dinner/snack entries
+3. **Foods** - Browse, search, manage Food Bank
+4. **Analysis** - Charts and trends (with data source filter)
+5. **Settings** - API keys, profiles, preferences
+
+**Profile Switcher:** Available in navigation bar to quickly switch between profiles.
 
 ### Key Screens
 
@@ -448,16 +490,87 @@ protocol NutritionEstimator {
 
 ---
 
+### F8: Meal Tracking Mode
+
+**Description:** Track individual food consumption by meals (breakfast, lunch, dinner, snack), separate from grocery trip tracking. Meals focus on nutrition only (no prices).
+
+**Meal Entry Fields:**
+- Date and time
+- Meal type (breakfast, lunch, dinner, snack)
+- Items (linked to Food Bank)
+- Notes (optional)
+
+**Meal Item Fields:**
+- Name (as entered/extracted)
+- Quantity in grams
+- Linked food (optional, for nutrition calculation)
+- Skip flag (exclude from totals)
+
+**User Capabilities:**
+- Add meals manually or via AI (photo/text/voice)
+- Review and edit meal items
+- Link items to Food Bank for nutrition data
+- View meal history sorted by date
+- Delete meals
+
+**Key Differences from Grocery Trips:**
+
+| Aspect | Grocery Trip | Meal |
+|--------|--------------|------|
+| Focus | Shopping (price + nutrition) | Consumption (nutrition only) |
+| Metadata | Store name | Meal type |
+| Item data | Has price | No price |
+| Time | Date per trip | Date + meal type |
+
+---
+
+### F9: Multi-Profile Support
+
+**Description:** Support multiple user profiles within the app. Each profile has isolated consumption data while sharing the Food Bank.
+
+**Profile Fields:**
+- Name (e.g., "Dad", "Mom", "Kids")
+- Icon (SF Symbol)
+- Color (accent color)
+- Is default flag
+
+**Profile-Specific Data (Isolated):**
+- Grocery trips and items
+- Meals and items
+- Family members (for nutrition guide)
+- Nutrition targets
+- Family guide completion status
+
+**Shared Data (App-wide):**
+- Food Bank (foods, nutrition info)
+- Tags
+- Food categories
+- LLM provider settings
+- API keys
+- General app preferences
+
+**User Capabilities:**
+- Create/edit/delete profiles
+- Switch between profiles quickly
+- Set a default profile
+- Each profile sees only their trips, meals, and targets
+- All profiles share the same Food Bank
+
+**Use Cases:**
+- Family members tracking their own meals
+- Separate work vs personal tracking
+- Kids vs adults with different targets
+
+---
+
 ## Out of Scope (v1.0)
 
-- Per-person meal tracking
 - Barcode scanning
 - Recipe creation/meal planning
 - Shopping list generation
 - Social features / sharing
 - Android version
 - Web dashboard
-- Multiple households
 - Goal alerts/notifications (targets are set but no push alerts)
 - Integration with health apps (Apple Health)
 
@@ -489,3 +602,5 @@ protocol NutritionEstimator {
 | 2025-01-24 | 0.2 | Clarified unit standardization: all quantities stored in grams only. LLM converts kg/L/ml/pcs to grams. Removed unit field from PurchasedItem. |
 | 2025-01-24 | 0.3 | Added interface-first architecture section with key protocols (LLMService, ReceiptScanner, NutritionEstimator). Updated Vision framework role to OCR. |
 | 2025-01-25 | 0.4 | Added F7: Family Nutrition Guide - multi-step wizard for family member profiles with LLM-generated nutrition targets. Added FamilyMember, ActivityLevel, DietType data models. |
+| 2025-02-01 | 0.5 | Added F8: Meal Tracking Mode - track consumption by meals (breakfast/lunch/dinner/snack) as alternative to grocery trips. Both are consumption input methods users can mix. Added Meal, MealItem, MealType data models. |
+| 2025-02-01 | 0.6 | Added F9: Multi-Profile Support - isolated consumption data (trips, meals, targets) per profile while sharing Food Bank. Added Profile data model. Updated tab bar structure. |

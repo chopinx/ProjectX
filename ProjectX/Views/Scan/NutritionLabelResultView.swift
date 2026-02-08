@@ -1,11 +1,16 @@
 import SwiftUI
 import SwiftData
 
+enum NutritionLabelSource {
+    case image(UIImage)
+    case text(String)
+}
+
 struct NutritionLabelResultView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
 
-    let text: String
+    let source: NutritionLabelSource
     let settings: AppSettings
 
     @State private var isLoading = true
@@ -14,6 +19,16 @@ struct NutritionLabelResultView: View {
     @State private var foodName = ""
     @State private var category = FoodCategory(main: .other)
     @State private var showingSaveSuccess = false
+
+    init(image: UIImage, settings: AppSettings) {
+        self.source = .image(image)
+        self.settings = settings
+    }
+
+    init(text: String, settings: AppSettings) {
+        self.source = .text(text)
+        self.settings = settings
+    }
 
     var body: some View {
         Group {
@@ -95,7 +110,12 @@ struct NutritionLabelResultView: View {
         }
 
         do {
-            extractedNutrition = try await service.extractNutritionLabel(from: text)
+            switch source {
+            case .image(let image):
+                extractedNutrition = try await service.extractNutritionLabel(from: image)
+            case .text(let text):
+                extractedNutrition = try await service.extractNutritionLabel(from: text)
+            }
         } catch let error as LLMError {
             errorMessage = error.errorDescription
         } catch {

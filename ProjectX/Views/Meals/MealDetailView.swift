@@ -1,9 +1,9 @@
 import SwiftUI
 import SwiftData
 
-enum ItemSortOption: String, CaseIterable, Identifiable {
+enum MealItemSortOption: String, CaseIterable, Identifiable {
     case recent = "Recent", name = "Name", calories = "Calories", protein = "Protein"
-    case carbs = "Carbs", fat = "Fat", fiber = "Fiber", sugar = "Sugar", price = "Price"
+    case carbs = "Carbs", fat = "Fat", fiber = "Fiber", sugar = "Sugar"
 
     var id: String { rawValue }
     var icon: String {
@@ -16,11 +16,10 @@ enum ItemSortOption: String, CaseIterable, Identifiable {
         case .fat: "f.circle"
         case .fiber: "leaf"
         case .sugar: "s.circle"
-        case .price: "dollarsign.circle"
         }
     }
 
-    func value(for item: PurchasedItem) -> Double {
+    func value(for item: MealItem) -> Double {
         let n = item.calculatedNutrition
         switch self {
         case .recent, .name: return 0
@@ -30,34 +29,34 @@ enum ItemSortOption: String, CaseIterable, Identifiable {
         case .fat: return n?.fat ?? 0
         case .fiber: return n?.fiber ?? 0
         case .sugar: return n?.sugar ?? 0
-        case .price: return item.price
         }
     }
 }
 
-struct TripDetailView: View {
+struct MealDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Query(sort: \Food.name) private var foods: [Food]
 
     let settings: AppSettings
     @State private var date: Date
-    @State private var storeName: String
-    @State private var items: [PurchasedItem]
-    @State private var deletedItems: [PurchasedItem] = []
-    @State private var editingItem: PurchasedItem?
+    @State private var mealType: MealType
+    @State private var notes: String
+    @State private var items: [MealItem]
+    @State private var deletedItems: [MealItem] = []
+    @State private var editingItem: MealItem?
     @State private var showingAddItem = false
     @State private var showingAddItemsAI = false
     @State private var showingSaveError = false
-    @State private var sortOption: ItemSortOption = .recent
+    @State private var sortOption: MealItemSortOption = .recent
     @State private var sortAscending = false
 
-    private var existingTrip: GroceryTrip?
+    private var existingMeal: Meal?
     private var profile: Profile?
-    private var isNewTrip: Bool { existingTrip == nil }
+    private var isNewMeal: Bool { existingMeal == nil }
 
-    private var sortedItems: [PurchasedItem] {
-        let sorted: [PurchasedItem]
+    private var sortedItems: [MealItem] {
+        let sorted: [MealItem]
         switch sortOption {
         case .recent: sorted = items
         case .name: sorted = items.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
@@ -66,9 +65,8 @@ struct TripDetailView: View {
         return sortAscending ? sorted : sorted.reversed()
     }
 
-    private var activeItems: [PurchasedItem] { items.filter { !$0.isSkipped } }
+    private var activeItems: [MealItem] { items.filter { !$0.isSkipped } }
     private var linkedCount: Int { activeItems.filter { $0.food != nil }.count }
-    private var totalPrice: Double { activeItems.reduce(0) { $0 + $1.price } }
     private var totalNutrition: (cal: Double, pro: Double, carb: Double, fat: Double, fiber: Double, sugar: Double) {
         activeItems.reduce((0, 0, 0, 0, 0, 0)) { result, item in
             guard let n = item.calculatedNutrition else { return result }
@@ -76,13 +74,14 @@ struct TripDetailView: View {
         }
     }
 
-    init(trip: GroceryTrip?, profile: Profile? = nil, settings: AppSettings) {
-        self.existingTrip = trip
+    init(meal: Meal?, profile: Profile? = nil, settings: AppSettings) {
+        self.existingMeal = meal
         self.profile = profile
         self.settings = settings
-        _date = State(initialValue: trip?.date ?? .now)
-        _storeName = State(initialValue: trip?.storeName ?? "")
-        _items = State(initialValue: trip?.items ?? [])
+        _date = State(initialValue: meal?.date ?? .now)
+        _mealType = State(initialValue: meal?.mealType ?? .lunch)
+        _notes = State(initialValue: meal?.notes ?? "")
+        _items = State(initialValue: meal?.items ?? [])
     }
 
     var body: some View {
@@ -92,7 +91,7 @@ struct TripDetailView: View {
                 VStack(spacing: 12) {
                     HStack(spacing: 12) {
                         Button { showingAddItemsAI = true } label: {
-                            Label("Add Items (AI)", systemImage: "sparkles").frame(maxWidth: .infinity)
+                            Label("Add Foods (AI)", systemImage: "sparkles").frame(maxWidth: .infinity)
                         }.buttonStyle(.borderedProminent).tint(Color.themePrimary)
                         Button { showingAddItem = true } label: {
                             Label("Manual", systemImage: "plus").frame(maxWidth: .infinity)
@@ -106,10 +105,16 @@ struct TripDetailView: View {
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
 
-            // Trip Info
-            Section("Trip Info") {
-                DatePicker("Date", selection: $date, displayedComponents: .date)
-                TextField("Store (optional)", text: $storeName)
+            // Meal Info
+            Section("Meal Info") {
+                DatePicker("Date & Time", selection: $date)
+                Picker("Meal Type", selection: $mealType) {
+                    ForEach(MealType.allCases) { type in
+                        Label(type.rawValue, systemImage: type.icon).tag(type)
+                    }
+                }
+                TextField("Notes (optional)", text: $notes, axis: .vertical)
+                    .lineLimit(2...4)
             }
 
             // Items Section
@@ -117,12 +122,12 @@ struct TripDetailView: View {
                 if items.isEmpty {
                     VStack(spacing: 8) {
                         Text("No items yet").foregroundStyle(.secondary)
-                        Text("Use AI to scan receipts or add items manually").font(.caption).foregroundStyle(.tertiary)
+                        Text("Use AI to add foods or add items manually").font(.caption).foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 8)
                 } else {
                     ForEach(sortedItems) { item in
-                        Button { editingItem = item } label: { ItemRow(item: item) }
+                        Button { editingItem = item } label: { MealItemRow(item: item) }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) { deleteItem(item) } label: {
@@ -139,7 +144,7 @@ struct TripDetailView: View {
                 }
             }
         }
-        .navigationTitle(isNewTrip ? "New Trip" : "Edit Trip")
+        .navigationTitle(isNewMeal ? "New Meal" : "Edit Meal")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -147,7 +152,7 @@ struct TripDetailView: View {
         }
         .sheet(item: $editingItem) { item in
             NavigationStack {
-                ItemEditView(item: item, foods: foods, settings: settings) { updated in
+                ItemEditView(mealItem: item, foods: foods, settings: settings) { updated in
                     if let i = items.firstIndex(where: { $0.id == item.id }) { items[i] = updated }
                     editingItem = nil
                 }
@@ -155,14 +160,14 @@ struct TripDetailView: View {
         }
         .sheet(isPresented: $showingAddItem) {
             NavigationStack {
-                ItemEditView(item: nil, foods: foods, settings: settings) { items.append($0); showingAddItem = false }
+                ItemEditView(mealItem: nil, foods: foods, settings: settings) { items.append($0); showingAddItem = false }
             }
         }
         .sheet(isPresented: $showingAddItemsAI) {
             AddItemsSheet(settings: settings) { extracted in
                 for e in extracted {
                     let linkedFood = e.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
-                    items.append(PurchasedItem(name: e.name, quantity: e.quantityGrams, price: e.price, food: linkedFood))
+                    items.append(MealItem(name: e.name, quantity: e.quantityGrams, food: linkedFood))
                 }
                 showingAddItemsAI = false
             }
@@ -176,25 +181,15 @@ struct TripDetailView: View {
 
     private var summaryCard: some View {
         VStack(spacing: 12) {
-            // Items & Price Row
-            HStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "cart.fill").foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(activeItems.count)").font(.title3).fontWeight(.semibold)
-                        Text("\(linkedCount) linked").font(.caption2).foregroundStyle(.secondary)
-                    }
+            // Items Row
+            HStack(spacing: 8) {
+                Image(systemName: "fork.knife").foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(activeItems.count)").font(.title3).fontWeight(.semibold)
+                    Text("\(linkedCount) linked").font(.caption2).foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity)
-
-                Divider().frame(height: 36)
-
-                HStack(spacing: 8) {
-                    Image(systemName: "dollarsign.circle.fill").foregroundStyle(.green)
-                    Text(String(format: "%.2f", totalPrice)).font(.title3).fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity)
 
             Divider()
 
@@ -238,7 +233,7 @@ struct TripDetailView: View {
 
     private var sortMenu: some View {
         Menu {
-            ForEach(ItemSortOption.allCases) { opt in
+            ForEach(MealItemSortOption.allCases) { opt in
                 Button {
                     if sortOption == opt { sortAscending.toggle() }
                     else { sortOption = opt; sortAscending = (opt == .name) }
@@ -259,28 +254,29 @@ struct TripDetailView: View {
 
     // MARK: - Actions
 
-    private func deleteItem(_ item: PurchasedItem) {
+    private func deleteItem(_ item: MealItem) {
         if let i = items.firstIndex(where: { $0.id == item.id }) {
-            if item.trip != nil { deletedItems.append(item) }
+            if item.meal != nil { deletedItems.append(item) }
             _ = withAnimation { items.remove(at: i) }
         }
     }
 
     private func save() {
-        let trip: GroceryTrip
-        if let existingTrip {
-            trip = existingTrip
-            trip.date = date
-            trip.storeName = storeName.isEmpty ? nil : storeName
-            trip.updatedAt = .now
+        let meal: Meal
+        if let existingMeal {
+            meal = existingMeal
+            meal.date = date
+            meal.mealType = mealType
+            meal.notes = notes.isEmpty ? nil : notes
+            meal.updatedAt = .now
             deletedItems.forEach { context.delete($0) }
-            trip.items.removeAll()
+            meal.items.removeAll()
         } else {
-            trip = GroceryTrip(date: date, storeName: storeName.isEmpty ? nil : storeName)
-            trip.profile = profile
-            context.insert(trip)
+            meal = Meal(date: date, mealType: mealType, notes: notes.isEmpty ? nil : notes)
+            meal.profile = profile
+            context.insert(meal)
         }
-        for item in items { item.trip = trip; trip.items.append(item) }
+        for item in items { item.meal = meal; meal.items.append(item) }
         do { try context.save(); dismiss() } catch { showingSaveError = true }
     }
 }
@@ -302,8 +298,10 @@ private struct MacroStat: View {
     }
 }
 
-private struct ItemRow: View {
-    let item: PurchasedItem
+// MARK: - Meal Item Row
+
+struct MealItemRow: View {
+    let item: MealItem
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -322,10 +320,8 @@ private struct ItemRow: View {
                     }
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(item.quantity))g")
-                    Text(String(format: "%.2f", item.price)).foregroundStyle(.secondary)
-                }.font(.subheadline)
+                Text("\(Int(item.quantity))g")
+                    .font(.subheadline)
             }
             if let nutrition = item.calculatedNutrition {
                 NutritionSummaryRow(nutrition: nutrition, isCompact: true).opacity(item.isSkipped ? 0.5 : 1)

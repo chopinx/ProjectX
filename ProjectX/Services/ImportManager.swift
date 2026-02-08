@@ -15,22 +15,6 @@ final class ImportManager {
     var pendingImport: ImportSource?
     var showingImportTypeSelection = false
 
-    func extractText(from image: UIImage) async throws -> String {
-        try await OCRService().extractText(from: image)
-    }
-
-    func extractText(from pdfData: Data) async throws -> String {
-        try await OCRService().extractText(from: pdfData)
-    }
-
-    func processImport(_ source: ImportSource) async throws -> String {
-        switch source {
-        case .image(let image): return try await extractText(from: image)
-        case .pdf(let data): return try await extractText(from: data)
-        case .text(let text): return text
-        }
-    }
-
     func handleSharedContent(url: URL) {
         let ext = url.pathExtension.lowercased()
         if ext == "pdf", let data = try? Data(contentsOf: url) {

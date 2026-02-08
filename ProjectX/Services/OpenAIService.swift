@@ -45,6 +45,11 @@ final class OpenAIService: LLMService {
         return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
     }
 
+    func fillEmptyNutrition(for foodName: String, category: String, tags: [String], existingNutrition: [String: Double]) async throws -> ExtractedNutrition {
+        let response = try await sendTextRequest(prompt: LLMPrompts.fillEmptyNutritionPrompt(foodName: foodName, category: category, tags: tags, existingNutrition: existingNutrition))
+        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
+    }
+
     func matchFood(itemName: String, existingFoods: [String]) async throws -> FoodMatch {
         let response = try await sendTextRequest(prompt: LLMPrompts.matchFoodPrompt(itemName: itemName, existingFoods: existingFoods))
         return try LLMJSONParser.parse(response, as: FoodMatch.self)
@@ -88,7 +93,8 @@ final class OpenAIService: LLMService {
     }
 
     private func sendRequest(body: [String: Any]) async throws -> String {
-        var request = URLRequest(url: URL(string: baseURL)!)
+        guard let url = URL(string: baseURL) else { throw LLMError.invalidResponse }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

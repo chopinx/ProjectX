@@ -134,4 +134,27 @@ final class NutritionInfo {
             potassium: extracted.potassium
         )
     }
+
+    /// Sum multiple NutritionInfo values into one
+    static func sum(_ values: [NutritionInfo?]) -> NutritionInfo {
+        let nonNil = values.compactMap { $0 }
+        return NutritionInfo(
+            calories: nonNil.reduce(0) { $0 + $1.calories },
+            protein: nonNil.reduce(0) { $0 + $1.protein },
+            carbohydrates: nonNil.reduce(0) { $0 + $1.carbohydrates },
+            fat: nonNil.reduce(0) { $0 + $1.fat },
+            saturatedFat: nonNil.reduce(0) { $0 + $1.saturatedFat },
+            omega3: nonNil.reduce(0) { $0 + $1.omega3 },
+            omega6: nonNil.reduce(0) { $0 + $1.omega6 },
+            sugar: nonNil.reduce(0) { $0 + $1.sugar },
+            fiber: nonNil.reduce(0) { $0 + $1.fiber },
+            sodium: nonNil.reduce(0) { $0 + $1.sodium },
+            vitaminA: nonNil.reduce(0) { $0 + $1.vitaminA },
+            vitaminC: nonNil.reduce(0) { $0 + $1.vitaminC },
+            vitaminD: nonNil.reduce(0) { $0 + $1.vitaminD },
+            calcium: nonNil.reduce(0) { $0 + $1.calcium },
+            iron: nonNil.reduce(0) { $0 + $1.iron },
+            potassium: nonNil.reduce(0) { $0 + $1.potassium }
+        )
+    }
 }

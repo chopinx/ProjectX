@@ -141,6 +141,7 @@ final class AppSettings {
     private let familyMembersKey = "family_members"
     private let familyGuideCompletedKey = "family_guide_completed"
     private let filterBabyFoodKey = "filter_baby_food"
+    private let activeProfileIdKey = "active_profile_id"
 
     var selectedProvider: LLMProvider {
         didSet {
@@ -150,13 +151,21 @@ final class AppSettings {
 
     var openaiAPIKey: String {
         didSet {
-            try? KeychainHelper.save(key: openaiKeyKey, value: openaiAPIKey)
+            do {
+                try KeychainHelper.save(key: openaiKeyKey, value: openaiAPIKey)
+            } catch {
+                print("[AppSettings] Failed to save OpenAI API key to Keychain: \(error)")
+            }
         }
     }
 
     var claudeAPIKey: String {
         didSet {
-            try? KeychainHelper.save(key: claudeKeyKey, value: claudeAPIKey)
+            do {
+                try KeychainHelper.save(key: claudeKeyKey, value: claudeAPIKey)
+            } catch {
+                print("[AppSettings] Failed to save Claude API key to Keychain: \(error)")
+            }
         }
     }
 
@@ -197,6 +206,16 @@ final class AppSettings {
     var filterBabyFood: Bool {
         didSet {
             UserDefaults.standard.set(filterBabyFood, forKey: filterBabyFoodKey)
+        }
+    }
+
+    var activeProfileId: UUID? {
+        didSet {
+            if let id = activeProfileId {
+                UserDefaults.standard.set(id.uuidString, forKey: activeProfileIdKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: activeProfileIdKey)
+            }
         }
     }
 
@@ -246,5 +265,56 @@ final class AppSettings {
 
         self.hasCompletedFamilyGuide = UserDefaults.standard.bool(forKey: familyGuideCompletedKey)
         self.filterBabyFood = UserDefaults.standard.bool(forKey: filterBabyFoodKey)
+
+        if let idString = UserDefaults.standard.string(forKey: activeProfileIdKey),
+           let id = UUID(uuidString: idString) {
+            self.activeProfileId = id
+        } else {
+            self.activeProfileId = nil
+        }
+    }
+
+    // MARK: - Profile-Specific Settings
+
+    func familyMembers(for profileId: UUID) -> [FamilyMember] {
+        let key = "\(familyMembersKey)_\(profileId.uuidString)"
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let members = try? JSONDecoder().decode([FamilyMember].self, from: data) else {
+            return []
+        }
+        return members
+    }
+
+    func setFamilyMembers(_ members: [FamilyMember], for profileId: UUID) {
+        let key = "\(familyMembersKey)_\(profileId.uuidString)"
+        if let data = try? JSONEncoder().encode(members) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    func nutritionTarget(for profileId: UUID) -> NutritionTarget {
+        let key = "\(nutritionTargetKey)_\(profileId.uuidString)"
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let target = try? JSONDecoder().decode(NutritionTarget.self, from: data) else {
+            return .default
+        }
+        return target
+    }
+
+    func setNutritionTarget(_ target: NutritionTarget, for profileId: UUID) {
+        let key = "\(nutritionTargetKey)_\(profileId.uuidString)"
+        if let data = try? JSONEncoder().encode(target) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    func hasCompletedFamilyGuide(for profileId: UUID) -> Bool {
+        let key = "\(familyGuideCompletedKey)_\(profileId.uuidString)"
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
+    func setHasCompletedFamilyGuide(_ completed: Bool, for profileId: UUID) {
+        let key = "\(familyGuideCompletedKey)_\(profileId.uuidString)"
+        UserDefaults.standard.set(completed, forKey: key)
     }
 }

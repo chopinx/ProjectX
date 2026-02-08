@@ -138,20 +138,15 @@ struct NutritionLabelScanView: View {
     }
 
     private func extractFromImages() async {
-        guard !capturedImages.isEmpty else { return }
+        guard let firstImage = capturedImages.first else { return }
         isExtracting = true
         errorMessage = nil
         do {
-            let ocr = OCRService()
-            var allText = ""
-            for (i, image) in capturedImages.enumerated() {
-                let text = try await ocr.extractText(from: image)
-                allText += (i > 0 ? "\n\n--- Image \(i + 1) ---\n\n" : "") + text
-            }
             guard let service = LLMServiceFactory.create(settings: settings) else {
                 throw LLMError.invalidAPIKey
             }
-            onExtracted(try await service.extractNutritionLabel(from: allText))
+            // Use first image - nutrition labels are typically complete on one photo
+            onExtracted(try await service.extractNutritionLabel(from: firstImage))
         } catch let error as LLMError {
             errorMessage = error.errorDescription
         } catch {

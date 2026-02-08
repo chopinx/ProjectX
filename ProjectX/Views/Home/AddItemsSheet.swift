@@ -4,6 +4,7 @@ import SwiftData
 struct AddItemsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Food.name) private var foods: [Food]
+    let settings: AppSettings
     let onItemsExtracted: ([ExtractedReceiptItem]) -> Void
 
     @State private var mode: InputMode = .options
@@ -13,7 +14,6 @@ struct AddItemsSheet: View {
     @State private var inputText = ""
     @State private var isExtracting = false
     @State private var errorMessage: String?
-    @State private var settings = AppSettings()
 
     // Review mode state
     @State private var extractedItems: [ExtractedReceiptItem] = []
@@ -69,7 +69,7 @@ struct AddItemsSheet: View {
             }
             .sheet(item: $editingItem) { item in
                 NavigationStack {
-                    ItemEditView(item: item, foods: foods) { updated in
+                    ItemEditView(item: item, foods: foods, settings: settings) { updated in
                         if let idx = extractedItems.firstIndex(where: { $0.id == item.id }) {
                             extractedItems[idx] = updated
                         }
@@ -225,15 +225,13 @@ struct AddItemsSheet: View {
         isExtracting = true
         errorMessage = nil
         do {
-            let ocr = OCRService()
-            var allText = ""
-            for (i, image) in capturedImages.enumerated() {
-                let text = try await ocr.extractText(from: image)
-                allText += (i > 0 ? "\n\n" : "") + text
-            }
             guard let service = LLMServiceFactory.create(settings: settings) else { throw LLMError.invalidAPIKey }
-            let receipt = try await service.extractReceipt(from: allText, filterBabyFood: settings.filterBabyFood)
-            extractedItems = receipt.items
+            var allItems: [ExtractedReceiptItem] = []
+            for image in capturedImages {
+                let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
+                allItems.append(contentsOf: receipt.items)
+            }
+            extractedItems = allItems
             await autoLinkFoods(service: service)
             mode = .review
         } catch let error as LLMError {

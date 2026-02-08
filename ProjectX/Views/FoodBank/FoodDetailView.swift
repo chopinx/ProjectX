@@ -6,6 +6,7 @@ struct FoodDetailView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Tag.name) private var allTags: [Tag]
 
+    let settings: AppSettings
     @State private var name: String
     @State private var category: FoodCategory
     @State private var selectedTags: [Tag]
@@ -15,16 +16,17 @@ struct FoodDetailView: View {
     @State private var isAISuggestingCategory = false
     @State private var isAIEstimatingNutrition = false
     @State private var aiError: String?
-    @State private var settings = AppSettings()
     @State private var hasAutoSuggested = false
+    @State private var showingScanLabel = false
 
     private var existingFood: Food?
     private var onSave: ((Food) -> Void)?
     private var autoSuggest: Bool
 
     /// Standard init for Food Bank (edit existing or create new)
-    init(food: Food?) {
+    init(food: Food?, settings: AppSettings) {
         self.existingFood = food
+        self.settings = settings
         self.onSave = nil
         self.autoSuggest = false
         _name = State(initialValue: food?.name ?? "")
@@ -35,8 +37,9 @@ struct FoodDetailView: View {
     }
 
     /// Init for creating new food with suggested values (used in receipt flow)
-    init(suggestedName: String, suggestedCategory: String, onSave: @escaping (Food) -> Void) {
+    init(suggestedName: String, suggestedCategory: String, settings: AppSettings, onSave: @escaping (Food) -> Void) {
         self.existingFood = nil
+        self.settings = settings
         self.onSave = onSave
         self.autoSuggest = true
         _name = State(initialValue: suggestedName)
@@ -63,7 +66,9 @@ struct FoodDetailView: View {
             TagPicker(selectedTags: $selectedTags)
 
             Section {
+                scanLabelButton
                 aiNutritionButton
+                resetNutritionButton
             }
             NutritionFormSection(fields: $nutrition)
         }
@@ -87,6 +92,15 @@ struct FoodDetailView: View {
             Button("OK") { aiError = nil }
         } message: {
             Text(aiError ?? "")
+        }
+        .sheet(isPresented: $showingScanLabel) {
+            NavigationStack {
+                NutritionLabelScanView { extractedNutrition in
+                    // Fill empty fields only from scanned nutrition label
+                    nutrition.populateEmptyOnly(from: extractedNutrition, source: .labelScan)
+                    showingScanLabel = false
+                }
+            }
         }
         .task {
             if autoSuggest && !hasAutoSuggested && !name.isEmpty {
@@ -120,23 +134,66 @@ struct FoodDetailView: View {
         }
     }
 
+    // MARK: - Scan Label Button
+
+    private var scanLabelButton: some View {
+        Button {
+            showingScanLabel = true
+        } label: {
+            Label("Scan Nutrition Label", systemImage: "text.viewfinder")
+        }
+        .disabled(!settings.isConfigured)
+    }
+
     // MARK: - AI Nutrition Button
 
     private var aiNutritionButton: some View {
         AIActionButton(
-            title: "AI Estimate Nutrition",
+            title: "AI Fill Empty Fields",
             loadingText: "Estimating...",
             isLoading: isAIEstimatingNutrition,
             isDisabled: name.trimmingCharacters(in: .whitespaces).isEmpty || !settings.isConfigured
         ) {
-            Task { await estimateNutrition() }
+            Task { await estimateNutrition(fillEmptyOnly: true) }
         }
     }
 
-    private func estimateNutrition() async {
+    private var resetNutritionButton: some View {
+        Button {
+            Task { await estimateNutrition(fillEmptyOnly: false) }
+        } label: {
+            HStack {
+                if isAIEstimatingNutrition {
+                    ProgressView().controlSize(.small)
+                    Text("Estimating...").foregroundStyle(.secondary)
+                } else {
+                    Label("Reset All with AI", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
+        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || !settings.isConfigured || isAIEstimatingNutrition)
+        .foregroundStyle(Color.themeWarning)
+    }
+
+    private func estimateNutrition(fillEmptyOnly: Bool) async {
         await runAIOperation(setLoading: { isAIEstimatingNutrition = $0 }) { service in
-            let result = try await service.estimateNutrition(for: name, category: category.displayName)
-            nutrition.populate(from: result, source: .aiEstimate)
+            if fillEmptyOnly {
+                // Use context-aware fill that includes existing values
+                let existingValues = nutrition.toExistingValuesDictionary()
+                let tagNames = selectedTags.map(\.name)
+                let result = try await service.fillEmptyNutrition(
+                    for: name,
+                    category: category.displayName,
+                    tags: tagNames,
+                    existingNutrition: existingValues
+                )
+                nutrition.populateEmptyOnly(from: result, source: .aiEstimate)
+            } else {
+                // Reset all fields first, then populate with basic estimate
+                let result = try await service.estimateNutrition(for: name, category: category.displayName)
+                nutrition = NutritionFields()
+                nutrition.populate(from: result, source: .aiEstimate)
+            }
         }
     }
 

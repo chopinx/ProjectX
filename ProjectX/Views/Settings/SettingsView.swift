@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Bindable var settings: AppSettings
     @Environment(\.modelContext) private var context
+    @Query(sort: \Profile.createdAt) private var profiles: [Profile]
 
     @State private var apiKeyInput = ""
     @State private var isValidating = false
@@ -23,6 +24,10 @@ struct SettingsView: View {
     @State private var showingFamilyGuide = false
 
     enum ValidationResult { case success, error(String) }
+
+    private var activeProfileName: String {
+        profiles.first { $0.id == settings.activeProfileId }?.name ?? "Default"
+    }
 
     var body: some View {
         NavigationStack {
@@ -45,14 +50,14 @@ struct SettingsView: View {
                 Text("'Add Missing' adds any default tags you've deleted. 'Reset All' removes all tags and recreates defaults.")
             }
             .sheet(isPresented: $showingExportSheet) {
-                ExportDataSheet(context: context)
+                ExportDataSheet(context: context, settings: settings, profileName: activeProfileName)
             }
             .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
                 handleImportFile(result)
             }
             .sheet(isPresented: $showingImportSheet) {
                 if let data = importData, let preview = importPreview {
-                    ImportDataSheet(data: data, preview: preview, context: context) { result in
+                    ImportDataSheet(data: data, preview: preview, context: context, settings: settings, profileName: activeProfileName) { result in
                         importResultMessage = result.summary
                         showingImportResult = true
                         showingImportSheet = false
@@ -70,7 +75,7 @@ struct SettingsView: View {
                 Text(importErrorMessage)
             }
             .sheet(isPresented: $showingNutritionTargetSheet) {
-                NutritionTargetSheet(target: $settings.dailyNutritionTarget)
+                NutritionTargetSheet(target: nutritionTargetBinding)
             }
             .sheet(isPresented: $showingFamilyGuide) {
                 FamilyGuideView(settings: settings)
@@ -193,13 +198,47 @@ struct SettingsView: View {
         }
     }
 
+    private var currentNutritionTarget: NutritionTarget {
+        if let profileId = settings.activeProfileId {
+            return settings.nutritionTarget(for: profileId)
+        }
+        return settings.dailyNutritionTarget
+    }
+
+    private var currentMembers: [FamilyMember] {
+        if let profileId = settings.activeProfileId {
+            return settings.familyMembers(for: profileId)
+        }
+        return settings.familyMembers
+    }
+
+    private var hasCompletedGuide: Bool {
+        if let profileId = settings.activeProfileId {
+            return settings.hasCompletedFamilyGuide(for: profileId)
+        }
+        return settings.hasCompletedFamilyGuide
+    }
+
+    private var nutritionTargetBinding: Binding<NutritionTarget> {
+        Binding(
+            get: { currentNutritionTarget },
+            set: { newValue in
+                if let profileId = settings.activeProfileId {
+                    settings.setNutritionTarget(newValue, for: profileId)
+                } else {
+                    settings.dailyNutritionTarget = newValue
+                }
+            }
+        )
+    }
+
     private var nutritionTargetSection: some View {
         Section {
             Button { showingFamilyGuide = true } label: {
                 HStack {
-                    Label("Family Nutrition Guide", systemImage: "sparkles")
+                    Label("Nutrition Guide", systemImage: "sparkles")
                     Spacer()
-                    if settings.hasCompletedFamilyGuide {
+                    if hasCompletedGuide {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.themeSuccess)
                     } else {
                         Text("Set Up").foregroundStyle(.secondary)
@@ -210,20 +249,20 @@ struct SettingsView: View {
                 HStack {
                     Label("Manual Target", systemImage: "slider.horizontal.3")
                     Spacer()
-                    Text("\(Int(settings.dailyNutritionTarget.calories)) kcal").foregroundStyle(.secondary)
+                    Text("\(Int(currentNutritionTarget.calories)) kcal").foregroundStyle(.secondary)
                 }
             }
-            if !settings.familyMembers.isEmpty {
+            if !currentMembers.isEmpty {
                 HStack {
-                    Text("Family Members")
+                    Text("Members")
                     Spacer()
-                    Text(settings.familyMembers.map(\.name).joined(separator: ", ")).foregroundStyle(.secondary).lineLimit(1)
+                    Text(currentMembers.map(\.name).joined(separator: ", ")).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
         } header: {
-            Text("Family Goals")
+            Text("Nutrition Goals")
         } footer: {
-            Text("Use the guide for AI-powered targets based on your family, or set targets manually.")
+            Text("Use the guide for AI-powered targets based on your household, or set targets manually.")
         }
     }
 
@@ -239,6 +278,11 @@ struct SettingsView: View {
 
     private var dataManagementSection: some View {
         Section("Data Management") {
+            NavigationLink {
+                ProfilesView(settings: settings)
+            } label: {
+                Label("Profiles", systemImage: "person.2")
+            }
             NavigationLink {
                 TagCategoryManagementView()
             } label: {
@@ -289,7 +333,7 @@ struct SettingsView: View {
             defer { url.stopAccessingSecurityScopedResource() }
             do {
                 let data = try Data(contentsOf: url)
-                let preview = try DataExportService(modelContext: context).previewImport(from: data)
+                let preview = try DataExportService(modelContext: context, profileId: settings.activeProfileId).previewImport(from: data)
                 if preview.hasData {
                     importData = data
                     importPreview = preview

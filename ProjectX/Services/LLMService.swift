@@ -135,6 +135,14 @@ protocol LLMService {
     /// Estimate nutrition for a food item by name
     func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition
 
+    /// Estimate nutrition for empty fields, considering existing values
+    func fillEmptyNutrition(
+        for foodName: String,
+        category: String,
+        tags: [String],
+        existingNutrition: [String: Double]
+    ) async throws -> ExtractedNutrition
+
     /// Match receipt item to foods in the food bank
     func matchFood(itemName: String, existingFoods: [String]) async throws -> FoodMatch
 

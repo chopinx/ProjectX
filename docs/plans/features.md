@@ -424,3 +424,138 @@ Multi-step wizard that collects family member profiles and uses LLM to generate 
 - `ProjectX/Services/AppSettings.swift` - familyMembers storage, guide completion flag
 - `ProjectX/Services/LLMService.swift` - suggestNutritionTargets method
 - `ProjectX/Views/Settings/FamilyGuideView.swift` - Wizard UI
+
+---
+
+## Meal Tracking Mode
+
+Track individual food consumption by meals as an alternative to grocery trip tracking. Users can mix both input methods within a profile.
+
+### Meal Types
+
+| Type | Icon | Default Time |
+|------|------|--------------|
+| Breakfast | sunrise.fill | 8:00 |
+| Lunch | sun.max.fill | 12:30 |
+| Dinner | moon.stars.fill | 19:00 |
+| Snack | carrot.fill | 15:00 |
+
+### Meal vs Trip Comparison
+
+| Aspect | Grocery Trip | Meal |
+|--------|--------------|------|
+| Purpose | Track shopping purchases | Track consumption |
+| Price | Yes (per item) | No |
+| Metadata | Store name | Meal type |
+| Time | Date per trip | Date + meal type |
+| Focus | What was bought | What was eaten |
+
+### Meal Entry
+
+| Field | Type | Required |
+|-------|------|----------|
+| date | Date | Yes |
+| mealType | MealType | Yes |
+| notes | String | No |
+| items | [MealItem] | Yes |
+
+### Meal Item
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | String | Item name |
+| quantity | Double | Weight in grams |
+| food | Food? | Link to Food Bank |
+| isSkipped | Bool | Exclude from totals |
+
+### User Flow
+
+1. Tap Meals tab → Add Meal
+2. Select meal type (breakfast/lunch/dinner/snack)
+3. Add items via AI (photo/text/voice) or manually
+4. Link items to Food Bank for nutrition data
+5. Save meal
+
+### Analysis Integration
+
+- Analysis view has data source filter: All / Trips only / Meals only
+- Nutrition summaries combine data from both sources when "All" selected
+- Nutrition breakdown by category includes both trips and meals
+
+### Files
+
+- `ProjectX/Models/Meal.swift` - Meal, MealItem, MealType
+- `ProjectX/Views/Meals/MealsView.swift` - Meal list
+- `ProjectX/Views/Meals/MealDetailView.swift` - Create/edit meal
+- `ProjectX/Models/NutritionSummary.swift` - forMeals(), combined() methods
+
+---
+
+## Multi-Profile Support
+
+Support multiple user profiles for isolated consumption tracking while sharing the Food Bank.
+
+### Profile Data
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Unique identifier |
+| name | String | Display name (e.g., "Dad", "Mom") |
+| iconName | String | SF Symbol name |
+| colorHex | String | Accent color (hex) |
+| isDefault | Bool | Default profile flag |
+
+### Data Isolation
+
+**Profile-Specific (Isolated):**
+- Grocery trips and items
+- Meals and items
+- Family members (for nutrition guide)
+- Nutrition targets
+- Family guide completion
+
+**Shared (App-wide):**
+- Food Bank (foods, nutrition)
+- Tags
+- Custom subcategories
+- LLM settings (provider, API keys, model)
+- General preferences
+
+### Profile Icons
+
+Available SF Symbols for profile icons:
+- person.fill
+- figure.stand
+- figure.2.arms.open
+- face.smiling
+- star.fill
+- heart.fill
+- leaf.fill
+
+### Profile Colors
+
+| Name | Hex |
+|------|-----|
+| Blue | #007AFF |
+| Green | #34C759 |
+| Purple | #AF52DE |
+| Orange | #FF9500 |
+| Pink | #FF2D55 |
+| Teal | #5AC8FA |
+
+### User Flow
+
+1. First launch → Default profile created
+2. Settings → Profiles → Add/edit/delete profiles
+3. Profile switcher in nav bar → Quick switch
+4. Each profile sees only their trips/meals
+5. Food Bank shared across all profiles
+
+### Files
+
+- `ProjectX/Models/Profile.swift` - Profile model
+- `ProjectX/Views/Settings/ProfilesView.swift` - Profile management
+- `ProjectX/Views/Components/ProfileSwitcher.swift` - Quick switch UI
+- `ProjectX/Services/AppSettings.swift` - Profile-keyed settings
+
+See [Multi-Profile Implementation Plan](multi-profile-implementation.md) for detailed implementation guide.

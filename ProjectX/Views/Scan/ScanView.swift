@@ -15,7 +15,8 @@ struct ScanView: View {
     @State private var showTextInput = false
     @State private var receiptText = ""
     @State private var pendingOCRText: String?
-    @State private var isProcessingOCR = false
+    @State private var pendingImage: UIImage?
+    @State private var isProcessing = false
     @State private var errorMessage: String?
 
     enum ScanType: String, CaseIterable, Identifiable {
@@ -36,7 +37,7 @@ struct ScanView: View {
                     else { scanOptionsView }
                     Spacer()
                 }
-                if isProcessingOCR { ocrProcessingOverlay }
+                if isProcessing { processingOverlay }
             }
             .navigationTitle("Scan")
             .navigationBarTitleDisplayMode(.inline)
@@ -74,7 +75,10 @@ struct ScanView: View {
                 ScanTypeSelectionSheet(
                     onSelect: { type in
                         flowManager.showScanTypeSelection = false
-                        if let text = pendingOCRText {
+                        if let image = pendingImage {
+                            if type == .receipt { flowManager.startReceiptReview(image: image, settings: settings) }
+                            else { flowManager.startNutritionReview(image: image) }
+                        } else if let text = pendingOCRText {
                             if type == .receipt { flowManager.startReceiptReview(text: text, settings: settings) }
                             else { flowManager.startNutritionReview(text: text) }
                         }
@@ -88,7 +92,11 @@ struct ScanView: View {
                 }
             }
             .navigationDestination(isPresented: Binding(get: { flowManager.showNutritionFromText }, set: { flowManager.showNutritionFromText = $0 })) {
-                if let text = flowManager.activeNutritionText { NutritionLabelResultView(text: text, settings: settings) }
+                if let image = flowManager.getPendingImage() {
+                    NutritionLabelResultView(image: image, settings: settings)
+                } else if let text = flowManager.activeNutritionText {
+                    NutritionLabelResultView(text: text, settings: settings)
+                }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
         }
@@ -127,45 +135,71 @@ struct ScanView: View {
         }
     }
 
-    private var ocrProcessingOverlay: some View {
+    private var processingOverlay: some View {
         ZStack {
             Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: 16) {
                 ProgressView().scaleEffect(1.5).tint(.white)
-                Text("Extracting text...").font(.headline).foregroundStyle(.white)
+                Text("Processing...").font(.headline).foregroundStyle(.white)
             }.padding(32).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
 
     private func handleImageCaptured(_ image: UIImage) {
         showCamera = false; showPhotoPicker = false
-        Task { await performOCR(from: .image(image)) }
+        processImage(image)
     }
 
     private func handleDocumentPicked(_ url: URL) {
         let ext = url.pathExtension.lowercased()
         if ext == "pdf" {
-            guard let data = try? Data(contentsOf: url) else { errorMessage = "Failed to read PDF file"; return }
-            Task { await performOCR(from: .pdf(data)) }
+            guard let data = try? Data(contentsOf: url), let image = extractImageFromPDF(data) else {
+                errorMessage = "Failed to read PDF file"
+                return
+            }
+            processImage(image)
         } else if ["jpg", "jpeg", "png", "heic", "heif"].contains(ext) {
-            guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else { errorMessage = "Failed to read image file"; return }
-            Task { await performOCR(from: .image(image)) }
-        } else { errorMessage = "Unsupported file type" }
+            guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
+                errorMessage = "Failed to read image file"
+                return
+            }
+            processImage(image)
+        } else {
+            errorMessage = "Unsupported file type"
+        }
     }
 
-    private func performOCR(from source: ImportManager.ImportSource) async {
-        isProcessingOCR = true
-        defer { isProcessingOCR = false }
-        do {
-            let text = try await ImportManager().processImport(source)
-            pendingOCRText = text
-            if let mode = initialMode {
-                if mode == .receipt { flowManager.startReceiptReview(text: text, settings: settings) }
-                else { flowManager.startNutritionReview(text: text) }
-            } else {
-                flowManager.showScanTypeSelection = true
-            }
-        } catch { errorMessage = "Failed to extract text: \(error.localizedDescription)" }
+    private func processImage(_ image: UIImage) {
+        pendingImage = image
+        if let mode = initialMode {
+            if mode == .receipt { flowManager.startReceiptReview(image: image, settings: settings) }
+            else { flowManager.startNutritionReview(image: image) }
+        } else {
+            flowManager.showScanTypeSelection = true
+        }
+    }
+
+    private func extractImageFromPDF(_ data: Data) -> UIImage? {
+        guard let provider = CGDataProvider(data: data as CFData),
+              let pdfDoc = CGPDFDocument(provider),
+              let page = pdfDoc.page(at: 1) else { return nil }
+
+        let pageRect = page.getBoxRect(.mediaBox)
+        let scale: CGFloat = 2.0
+        let size = CGSize(width: pageRect.width * scale, height: pageRect.height * scale)
+
+        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
+        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
+
+        ctx.setFillColor(UIColor.white.cgColor)
+        ctx.fill(CGRect(origin: .zero, size: size))
+        ctx.translateBy(x: 0, y: size.height)
+        ctx.scaleBy(x: scale, y: -scale)
+        ctx.drawPDFPage(page)
+
+        let image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return image
     }
 }
 

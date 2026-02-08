@@ -3,11 +3,17 @@ import SwiftData
 
 struct HomeView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.scanFlowManager) private var flowManager
-    @Query(sort: \GroceryTrip.date, order: .reverse) private var trips: [GroceryTrip]
+    @Query(sort: \GroceryTrip.date, order: .reverse) private var allTrips: [GroceryTrip]
+    @Bindable var settings: AppSettings
 
-    @State private var showingNewTrip = false
-    @State private var showingAddOptions = false
+    init(settings: AppSettings) {
+        self.settings = settings
+    }
+
+    private var trips: [GroceryTrip] {
+        guard let profileId = settings.activeProfileId else { return allTrips }
+        return allTrips.filter { $0.profile?.id == profileId }
+    }
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -22,12 +28,12 @@ struct HomeView: View {
                     ContentUnavailableView(
                         "No Trips Yet",
                         systemImage: "cart.badge.plus",
-                        description: Text("Tap + to add your first grocery trip, or use Scan to import a receipt")
+                        description: Text("Use the + button to add your first grocery trip")
                     )
                 } else {
                     ForEach(trips) { trip in
                         NavigationLink {
-                            TripDetailView(trip: trip)
+                            TripDetailView(trip: trip, settings: settings)
                         } label: {
                             TripRow(trip: trip, title: tripTitle(for: trip))
                         }
@@ -44,23 +50,11 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("Home")
+            .navigationTitle("Trips")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingAddOptions = true } label: {
-                        Label("Add Trip", systemImage: "plus")
-                    }
+                ToolbarItem(placement: .topBarLeading) {
+                    ProfileToolbarButton(settings: settings)
                 }
-            }
-            .confirmationDialog("Add Trip", isPresented: $showingAddOptions, titleVisibility: .visible) {
-                Button("Scan Receipt") { flowManager.requestScanForReceipt() }
-                Button("Manual Entry") { showingNewTrip = true }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("How would you like to add a grocery trip?")
-            }
-            .sheet(isPresented: $showingNewTrip) {
-                NavigationStack { TripDetailView(trip: nil) }
             }
         }
     }

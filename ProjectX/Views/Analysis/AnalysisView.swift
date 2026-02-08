@@ -5,7 +5,7 @@ import Charts
 // MARK: - Time Period
 
 enum TimePeriod: String, CaseIterable, Identifiable {
-    case week = "7 Days", month = "30 Days", threeMonths = "3 Months"
+    case today = "Today", week = "7 Days", month = "30 Days", threeMonths = "3 Months"
     case yearToDate = "Year to Date", allTime = "All Time", custom = "Custom"
 
     var id: String { rawValue }
@@ -13,18 +13,30 @@ enum TimePeriod: String, CaseIterable, Identifiable {
     func dateRange(customStart: Date? = nil, customEnd: Date? = nil) -> ClosedRange<Date>? {
         let now = Date(), cal = Calendar.current
         switch self {
+        case .today:
+            let startOfDay = cal.startOfDay(for: now)
+            return startOfDay...now
         case .week: return cal.date(byAdding: .day, value: -7, to: now)!...now
         case .month: return cal.date(byAdding: .month, value: -1, to: now)!...now
         case .threeMonths: return cal.date(byAdding: .month, value: -3, to: now)!...now
         case .yearToDate: return cal.date(from: cal.dateComponents([.year], from: now))!...now
         case .allTime: return nil
-        case .custom: return customStart.flatMap { s in customEnd.map { s...$0 } }
+        case .custom:
+            guard let start = customStart, let end = customEnd else { return nil }
+            return start...end
         }
     }
 }
 
 enum CategoryLevel: String, CaseIterable, Identifiable {
     case main = "Main Category", sub = "Subcategory"
+    var id: String { rawValue }
+}
+
+enum DataSource: String, CaseIterable, Identifiable {
+    case all = "All"
+    case trips = "Trips"
+    case meals = "Meals"
     var id: String { rawValue }
 }
 
@@ -38,36 +50,67 @@ struct NutritionBreakdown: Identifiable {
 // MARK: - Analysis View
 
 struct AnalysisView: View {
-    @Query(sort: \GroceryTrip.date) private var trips: [GroceryTrip]
+    @Query(sort: \GroceryTrip.date) private var allTrips: [GroceryTrip]
+    @Query(sort: \Meal.date) private var allMeals: [Meal]
     @Query private var foods: [Food]
-    @State private var settings = AppSettings()
+    @Bindable var settings: AppSettings
+
+    private var trips: [GroceryTrip] {
+        guard let profileId = settings.activeProfileId else { return allTrips }
+        return allTrips.filter { $0.profile?.id == profileId }
+    }
+
+    private var meals: [Meal] {
+        guard let profileId = settings.activeProfileId else { return allMeals }
+        return allMeals.filter { $0.profile?.id == profileId }
+    }
+
+    private var currentNutritionTarget: NutritionTarget {
+        if let profileId = settings.activeProfileId {
+            return settings.nutritionTarget(for: profileId)
+        }
+        return settings.dailyNutritionTarget
+    }
     @AppStorage("excludePantryStaples") private var excludePantryStaples = false
     @AppStorage("selectedTimePeriod") private var selectedPeriodRaw = TimePeriod.month.rawValue
     @AppStorage("categoryLevel") private var categoryLevelRaw = CategoryLevel.main.rawValue
+    @AppStorage("dataSource") private var dataSourceRaw = DataSource.all.rawValue
     @State private var customStartDate = Calendar.current.date(byAdding: .month, value: -1, to: Date())!
     @State private var customEndDate = Date()
     @State private var showingDatePicker = false
+    @State private var previousPeriodRaw: String = TimePeriod.month.rawValue
 
     private var selectedPeriod: TimePeriod { TimePeriod(rawValue: selectedPeriodRaw) ?? .month }
     private var categoryLevel: CategoryLevel { CategoryLevel(rawValue: categoryLevelRaw) ?? .main }
+    private var dataSource: DataSource { DataSource(rawValue: dataSourceRaw) ?? .all }
     private var dateRange: ClosedRange<Date>? { selectedPeriod.dateRange(customStart: customStartDate, customEnd: customEndDate) }
-    private var summary: NutritionSummary { NutritionSummary.forTrips(trips, in: dateRange, excludePantryStaples: excludePantryStaples) }
+    private var summary: NutritionSummary {
+        switch dataSource {
+        case .all: return NutritionSummary.combined(trips: trips, meals: meals, in: dateRange, excludePantryStaples: excludePantryStaples)
+        case .trips: return NutritionSummary.forTrips(trips, in: dateRange, excludePantryStaples: excludePantryStaples)
+        case .meals: return NutritionSummary.forMeals(meals, in: dateRange, excludePantryStaples: excludePantryStaples)
+        }
+    }
     private var nutritionBreakdown: [NutritionBreakdown] { computeBreakdown() }
     private var foodsHash: Int { foods.reduce(into: Hasher()) { $0.combine($1.id); $0.combine($1.isPantryStaple) }.finalize() }
+    private var hasData: Bool { !allTrips.isEmpty || !allMeals.isEmpty }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     Color.clear.frame(height: 0).id(foodsHash)
-                    if trips.isEmpty {
-                        emptyState("No Data Yet", icon: "chart.bar.doc.horizontal", text: "Add grocery trips with linked foods to see your nutrition analysis")
+                    // Always show filters so user can adjust them
+                    dataSourceSection
+                    filtersSection
+                    timePeriodSection
+
+                    if !hasData {
+                        emptyState("No Data Yet", icon: "chart.bar.doc.horizontal", text: "Add grocery trips or meals with linked foods to see your nutrition analysis")
                     } else if summary.totalCalories == 0 {
-                        emptyState("No Nutrition Data", icon: "fork.knife.circle", text: "Link your purchased items to foods in the Food Bank to track nutrition")
+                        emptyState("No Nutrition Data", icon: "fork.knife.circle", text: "Link your items to foods in the Food Bank to track nutrition")
                     } else {
-                        filtersSection
-                        timePeriodSection
-                        DailyAverageCard(summary: summary, target: settings.dailyNutritionTarget, dayCount: summary.dayCount)
+                        DailyAverageCard(summary: summary, target: currentNutritionTarget, dayCount: summary.dayCount)
                         if !nutritionBreakdown.isEmpty { nutritionSourceSection }
                         legendSection
                     }
@@ -81,6 +124,19 @@ struct AnalysisView: View {
 
     private func emptyState(_ title: String, icon: String, text: String) -> some View {
         ContentUnavailableView(title, systemImage: icon, description: Text(text)).padding(.top, 100)
+    }
+
+    private var dataSourceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Data Source").font(.headline)
+            Picker("Source", selection: $dataSourceRaw) {
+                ForEach(DataSource.allCases) { source in
+                    Text(source.rawValue).tag(source.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .padding().background(.regularMaterial).clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var filtersSection: some View {
@@ -100,7 +156,10 @@ struct AnalysisView: View {
                 HStack(spacing: 8) {
                     ForEach(TimePeriod.allCases) { period in
                         Button {
-                            if period == .custom { showingDatePicker = true }
+                            if period == .custom {
+                                previousPeriodRaw = selectedPeriodRaw
+                                showingDatePicker = true
+                            }
                             selectedPeriodRaw = period.rawValue
                         } label: {
                             Text(period.rawValue).font(.subheadline)
@@ -164,7 +223,12 @@ struct AnalysisView: View {
             }
             .navigationTitle("Custom Range").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingDatePicker = false } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        selectedPeriodRaw = previousPeriodRaw
+                        showingDatePicker = false
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { showingDatePicker = false } }
             }
         }
@@ -173,16 +237,34 @@ struct AnalysisView: View {
 
     private func computeBreakdown() -> [NutritionBreakdown] {
         var totals: [String: (color: Color, cal: Double, pro: Double, carb: Double, fat: Double)] = [:]
-        let filteredTrips = dateRange.map { r in trips.filter { r.contains($0.date) } } ?? trips
 
-        for trip in filteredTrips {
-            for item in trip.items where !item.isSkipped {
-                guard let food = item.food, let n = item.calculatedNutrition else { continue }
-                if excludePantryStaples && food.isPantryStaple { continue }
-                let key = categoryLevel == .sub ? food.category.displayName : food.category.main.displayName
-                var cur = totals[key] ?? (food.category.main.themeColor, 0, 0, 0, 0)
-                cur.cal += n.calories; cur.pro += n.protein; cur.carb += n.carbohydrates; cur.fat += n.fat
-                totals[key] = cur
+        // Helper to accumulate nutrition from items
+        func accumulate(food: Food?, nutrition: NutritionInfo?) {
+            guard let food = food, let n = nutrition else { return }
+            if excludePantryStaples && food.isPantryStaple { return }
+            let key = categoryLevel == .sub ? food.category.displayName : food.category.main.displayName
+            var cur = totals[key] ?? (food.category.main.themeColor, 0, 0, 0, 0)
+            cur.cal += n.calories; cur.pro += n.protein; cur.carb += n.carbohydrates; cur.fat += n.fat
+            totals[key] = cur
+        }
+
+        // Include trips if data source is all or trips
+        if dataSource == .all || dataSource == .trips {
+            let filteredTrips = dateRange.map { r in trips.filter { r.contains($0.date) } } ?? trips
+            for trip in filteredTrips {
+                for item in trip.items where !item.isSkipped {
+                    accumulate(food: item.food, nutrition: item.calculatedNutrition)
+                }
+            }
+        }
+
+        // Include meals if data source is all or meals
+        if dataSource == .all || dataSource == .meals {
+            let filteredMeals = dateRange.map { r in meals.filter { r.contains($0.date) } } ?? meals
+            for meal in filteredMeals {
+                for item in meal.items where !item.isSkipped {
+                    accumulate(food: item.food, nutrition: item.calculatedNutrition)
+                }
             }
         }
 

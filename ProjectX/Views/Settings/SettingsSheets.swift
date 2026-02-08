@@ -15,22 +15,48 @@ func setToggleBinding<T: Hashable>(for item: T, in set: Binding<Set<T>>) -> Bind
 struct ExportDataSheet: View {
     @Environment(\.dismiss) private var dismiss
     let context: ModelContext
+    let settings: AppSettings
+    let profileName: String
+
     @State private var selectedTypes: Set<ExportDataType> = Set(ExportDataType.allCases)
     @State private var isExporting = false
     @State private var exportedFileURL: URL?
     @State private var showingShareSheet = false
+    @State private var showingConfirmation = false
     @State private var errorMessage: String?
+
+    private var profileDataTypes: [ExportDataType] { [.trips, .meals] }
+    private var globalDataTypes: [ExportDataType] { [.foods, .tags] }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Select Data to Export") {
-                    ForEach(ExportDataType.allCases) { type in
+                Section {
+                    HStack {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundStyle(Color.themePrimary)
+                        Text("Exporting for: **\(profileName)**")
+                    }
+                } footer: {
+                    Text("Trips and Meals will be exported only for the current profile. Foods and Tags are shared across all profiles.")
+                }
+
+                Section("Profile Data (\(profileName))") {
+                    ForEach(profileDataTypes, id: \.self) { type in
                         Toggle(isOn: setToggleBinding(for: type, in: $selectedTypes)) {
                             Label(type.rawValue, systemImage: type.icon)
                         }
                     }
                 }
+
+                Section("Global Data (All Profiles)") {
+                    ForEach(globalDataTypes, id: \.self) { type in
+                        Toggle(isOn: setToggleBinding(for: type, in: $selectedTypes)) {
+                            Label(type.rawValue, systemImage: type.icon)
+                        }
+                    }
+                }
+
                 if let error = errorMessage {
                     Section { Text(error).foregroundStyle(Color.themeError) }
                 }
@@ -40,8 +66,14 @@ struct ExportDataSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Export") { exportData() }.disabled(selectedTypes.isEmpty || isExporting)
+                    Button("Export") { showingConfirmation = true }.disabled(selectedTypes.isEmpty || isExporting)
                 }
+            }
+            .confirmationDialog("Confirm Export", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("Export Data") { exportData() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Export \(selectedTypes.count) data type(s) for profile \"\(profileName)\"?")
             }
             .sheet(isPresented: $showingShareSheet) {
                 if let url = exportedFileURL { ShareSheet(items: [url]) }
@@ -53,8 +85,8 @@ struct ExportDataSheet: View {
         isExporting = true
         errorMessage = nil
         do {
-            let data = try DataExportService(modelContext: context).exportData(types: selectedTypes)
-            let filename = "ProjectX-Export-\(Date().formatted(.dateTime.year().month().day())).json"
+            let data = try DataExportService(modelContext: context, profileId: settings.activeProfileId).exportData(types: selectedTypes)
+            let filename = "ProjectX-\(profileName)-\(Date().formatted(.dateTime.year().month().day())).json"
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
             try data.write(to: tempURL)
             exportedFileURL = tempURL
@@ -71,35 +103,75 @@ struct ImportDataSheet: View {
     let data: Data
     let preview: ImportPreview
     let context: ModelContext
+    let settings: AppSettings
+    let profileName: String
     let onComplete: (ImportResult) -> Void
+
     @State private var selectedTypes: Set<ExportDataType> = []
     @State private var isImporting = false
+    @State private var showingConfirmation = false
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    HStack {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundStyle(Color.themePrimary)
+                        Text("Importing to: **\(profileName)**")
+                    }
+                } footer: {
+                    Text("Trips and Meals will be imported to the current profile. Foods and Tags are shared across all profiles.")
+                }
+
                 if let date = preview.exportDate {
-                    Section { LabeledContent("Export Date", value: date.formatted(date: .abbreviated, time: .shortened)) }
-                }
-                Section("Select Data to Import") {
-                    if preview.tagsCount > 0 {
-                        Toggle(isOn: setToggleBinding(for: .tags, in: $selectedTypes)) {
-                            Label("\(preview.tagsCount) Tags", systemImage: ExportDataType.tags.icon)
-                        }
-                    }
-                    if preview.foodsCount > 0 {
-                        Toggle(isOn: setToggleBinding(for: .foods, in: $selectedTypes)) {
-                            Label("\(preview.foodsCount) Foods", systemImage: ExportDataType.foods.icon)
-                        }
-                    }
-                    if preview.tripsCount > 0 {
-                        Toggle(isOn: setToggleBinding(for: .trips, in: $selectedTypes)) {
-                            Label("\(preview.tripsCount) Trips", systemImage: ExportDataType.trips.icon)
+                    Section("Export Info") {
+                        LabeledContent("Export Date", value: date.formatted(date: .abbreviated, time: .shortened))
+                        if preview.profileId != nil {
+                            LabeledContent("Source", value: "Profile-specific export")
+                        } else {
+                            LabeledContent("Source", value: "Legacy export (all data)")
                         }
                     }
                 }
-                Section { Text("Existing items with the same name will be replaced.").font(.caption).foregroundStyle(.secondary) }
+
+                if preview.tripsCount > 0 || preview.mealsCount > 0 {
+                    Section("Profile Data (will import to \(profileName))") {
+                        if preview.tripsCount > 0 {
+                            Toggle(isOn: setToggleBinding(for: .trips, in: $selectedTypes)) {
+                                Label("\(preview.tripsCount) Trips", systemImage: ExportDataType.trips.icon)
+                            }
+                        }
+                        if preview.mealsCount > 0 {
+                            Toggle(isOn: setToggleBinding(for: .meals, in: $selectedTypes)) {
+                                Label("\(preview.mealsCount) Meals", systemImage: ExportDataType.meals.icon)
+                            }
+                        }
+                    }
+                }
+
+                if preview.foodsCount > 0 || preview.tagsCount > 0 {
+                    Section("Global Data (shared across profiles)") {
+                        if preview.foodsCount > 0 {
+                            Toggle(isOn: setToggleBinding(for: .foods, in: $selectedTypes)) {
+                                Label("\(preview.foodsCount) Foods", systemImage: ExportDataType.foods.icon)
+                            }
+                        }
+                        if preview.tagsCount > 0 {
+                            Toggle(isOn: setToggleBinding(for: .tags, in: $selectedTypes)) {
+                                Label("\(preview.tagsCount) Tags", systemImage: ExportDataType.tags.icon)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Text("Existing items with the same name will be updated. New items will be added.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if let error = errorMessage {
                     Section { Text(error).foregroundStyle(Color.themeError) }
                 }
@@ -109,13 +181,20 @@ struct ImportDataSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Import") { importData() }.disabled(selectedTypes.isEmpty || isImporting)
+                    Button("Import") { showingConfirmation = true }.disabled(selectedTypes.isEmpty || isImporting)
                 }
+            }
+            .confirmationDialog("Confirm Import", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("Import Data") { importData() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Import \(selectedTypes.count) data type(s) to profile \"\(profileName)\"?")
             }
             .onAppear {
                 if preview.tagsCount > 0 { selectedTypes.insert(.tags) }
                 if preview.foodsCount > 0 { selectedTypes.insert(.foods) }
                 if preview.tripsCount > 0 { selectedTypes.insert(.trips) }
+                if preview.mealsCount > 0 { selectedTypes.insert(.meals) }
             }
         }
     }
@@ -124,7 +203,7 @@ struct ImportDataSheet: View {
         isImporting = true
         errorMessage = nil
         do {
-            let result = try DataExportService(modelContext: context).importData(from: data, types: selectedTypes)
+            let result = try DataExportService(modelContext: context, profileId: settings.activeProfileId).importData(from: data, types: selectedTypes)
             onComplete(result)
         } catch {
             errorMessage = "Import failed: \(error.localizedDescription)"

@@ -15,7 +15,7 @@ struct ProjectXApp: App {
     @State private var scanFlowManager = ScanFlowManager()
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Food.self, NutritionInfo.self, GroceryTrip.self, PurchasedItem.self, Tag.self, CustomSubcategory.self])
+        let schema = Schema([Food.self, NutritionInfo.self, GroceryTrip.self, PurchasedItem.self, Tag.self, CustomSubcategory.self, Meal.self, MealItem.self, Profile.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             return try ModelContainer(for: schema, configurations: [config])

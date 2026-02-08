@@ -6,6 +6,8 @@ struct NutritionFieldRow: View {
     @Binding var value: String
     let unit: String
     var isSubItem: Bool = false
+    var isAIFilled: Bool = false
+    var onEdit: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -14,13 +16,23 @@ struct NutritionFieldRow: View {
                     .foregroundStyle(.tertiary)
                     .font(.caption)
             }
-            Text(label)
-                .foregroundStyle(isSubItem ? .secondary : .primary)
+            HStack(spacing: 4) {
+                Text(label)
+                    .foregroundStyle(isSubItem ? .secondary : .primary)
+                if isAIFilled {
+                    Image(systemName: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(Color.themePrimary)
+                }
+            }
             Spacer()
             TextField("0", text: $value)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 80)
+                .onChange(of: value) { _, _ in
+                    onEdit?()
+                }
             Text(unit)
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .leading)

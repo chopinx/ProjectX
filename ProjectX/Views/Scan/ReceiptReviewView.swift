@@ -94,6 +94,7 @@ struct ReceiptReviewView: View {
     @Environment(\.modelContext) private var ctx
     @Environment(\.scenePhase) private var phase
     @Query(sort: \Food.name) private var foods: [Food]
+    @Query(sort: \Profile.createdAt) private var profiles: [Profile]
     @State private var vm: ReceiptReviewViewModel
     @State private var editing: ExtractedReceiptItem?
     @State private var matching: ExtractedReceiptItem?
@@ -125,8 +126,8 @@ struct ReceiptReviewView: View {
             else { try? await Task.sleep(for: .milliseconds(100)); await vm.extract(); await vm.autoMatch(foods) }
         }
         .onChange(of: phase) { _, p in if p == .background || p == .inactive { vm.toDraft().save() } }
-        .sheet(item: $editing) { i in NavigationStack { ItemEditView(item: i, foods: foods) { vm.update(i, $0); editing = nil } } }
-        .sheet(item: $matching) { i in NavigationStack { FoodMatchingView(itemName: i.name, foods: foods, currentMatch: vm.foodLinks[i.id], onSelect: { vm.link($0, i); matching = nil }, suggestedCategory: i.category) } }
+        .sheet(item: $editing) { i in NavigationStack { ItemEditView(item: i, foods: foods, settings: vm.settings) { vm.update(i, $0); editing = nil } } }
+        .sheet(item: $matching) { i in NavigationStack { FoodMatchingView(itemName: i.name, foods: foods, currentMatch: vm.foodLinks[i.id], settings: vm.settings, onSelect: { vm.link($0, i); matching = nil }, suggestedCategory: i.category) } }
         .alert("Save Error", isPresented: $saveError) { Button("OK") {} } message: { Text("Failed to save.") }
         .alert("Remove Item?", isPresented: .init(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) { deleting = nil }
@@ -199,6 +200,7 @@ struct ReceiptReviewView: View {
 
     private func save() {
         let trip = GroceryTrip(date: vm.tripDate, storeName: vm.storeName.isEmpty ? nil : vm.storeName)
+        trip.profile = profiles.first { $0.id == vm.settings.activeProfileId }
         ctx.insert(trip)
         for item in vm.extractedItems { let p = PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: vm.foodLinks[item.id]); p.trip = trip; trip.items.append(p) }
         do { try ctx.save(); ReceiptDraft.clear(); onDismiss?(); dismiss() } catch { saveError = true }

@@ -14,9 +14,6 @@ struct FoodBankView: View {
     @State private var selectedSubcategory: FoodSubcategory?
     @State private var selectedCustomSub: String?
     @State private var selectedTag: Tag?
-    @State private var showingAddFood = false
-    @State private var showingAddOptions = false
-    @State private var showingNutritionScan = false
     @State private var foodToDelete: Food?
     @State private var isSelecting = false
     @State private var selectedFoodIds: Set<UUID> = []
@@ -75,8 +72,6 @@ struct FoodBankView: View {
                 ToolbarItem(placement: .primaryAction) {
                     if isSelecting {
                         Button("Done") { isSelecting = false; selectedFoodIds.removeAll() }
-                    } else {
-                        Button { showingAddOptions = true } label: { Label("Add Food", systemImage: "plus") }
                     }
                 }
                 ToolbarItem(placement: .secondaryAction) {
@@ -85,19 +80,6 @@ struct FoodBankView: View {
                     }
                 }
             }
-            .confirmationDialog("Add Food", isPresented: $showingAddOptions, titleVisibility: .visible) {
-                Button("Scan Nutrition Label") { showingNutritionScan = true }
-                Button("Manual Entry") { showingAddFood = true }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("How would you like to add a food?")
-            }
-        }
-        .sheet(isPresented: $showingAddFood) {
-            NavigationStack { FoodDetailView(food: nil) }
-        }
-        .fullScreenCover(isPresented: $showingNutritionScan) {
-            ScanView(settings: settings, initialMode: .nutritionLabel, onDismiss: { showingNutritionScan = false })
         }
         .deleteConfirmation("Delete Food?", item: $foodToDelete, message: { "Delete \"\($0.name)\"?" }) { food in
             withAnimation { context.delete(food) }
@@ -220,7 +202,7 @@ struct FoodBankView: View {
         List {
             if foods.isEmpty {
                 ContentUnavailableView("No Foods Yet", systemImage: "fork.knife",
-                    description: Text("Tap + to add a food manually"))
+                    description: Text("Use the + button to add a food"))
             } else if filteredFoods.isEmpty {
                 ContentUnavailableView("No Results", systemImage: "magnifyingglass",
                     description: Text("Try adjusting your filters"))
@@ -259,7 +241,7 @@ struct FoodBankView: View {
         if isSelecting {
             row
         } else {
-            NavigationLink { FoodDetailView(food: food) } label: { row }
+            NavigationLink { FoodDetailView(food: food, settings: settings) } label: { row }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) { DispatchQueue.main.async { foodToDelete = food } } label: {
                         Label("Delete", systemImage: "trash")

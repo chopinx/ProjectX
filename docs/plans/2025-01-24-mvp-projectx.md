@@ -16,6 +16,7 @@
 |----------|-------------|
 | [Implementation Tasks](implementation-tasks.md) | Detailed task breakdown (Tasks 1-9) |
 | [Features](features.md) | Feature documentation and specifications |
+| [Multi-Profile Implementation](multi-profile-implementation.md) | Multi-profile support implementation plan |
 
 ---
 
@@ -31,7 +32,7 @@
 
 ## MVP Features Summary
 
-1. SwiftData models: Food, NutritionInfo, GroceryTrip, PurchasedItem, Tag
+1. SwiftData models: Food, NutritionInfo, GroceryTrip, PurchasedItem, Tag, Meal, MealItem, Profile
 2. All quantities in grams (LLM converts from kg/L/pcs)
 3. LLM service layer: OpenAI + Claude support with model selection (see [Features](features.md#llm-integration))
 4. Secure API key storage via Keychain with validation
@@ -54,6 +55,8 @@
 21. AI food matching suggestions when linking items to Food Bank
 22. Review/edit flow after AI extraction (review each item before adding to trip)
 23. LLM weight estimation based on typical package sizes when weight not on receipt
+24. Meal tracking mode (breakfast/lunch/dinner/snack) - alternative consumption input (see [Features](features.md#meal-tracking-mode))
+25. Multi-profile support - isolated consumption data, shared Food Bank (see [Features](features.md#multi-profile-support))
 
 ---
 
@@ -99,6 +102,12 @@
 | AI food matching suggestions | Yes |
 | Review extracted items before adding | Yes |
 | LLM estimates weight from package info | Yes |
+| Track meals (breakfast/lunch/dinner/snack) | Yes |
+| Mix trips and meals as consumption inputs | Yes |
+| Create/manage profiles | Yes |
+| Switch between profiles | Yes |
+| Isolated consumption data per profile | Yes |
+| Shared Food Bank across profiles | Yes |
 
 ---
 
@@ -110,6 +119,9 @@ ProjectX/
 │   ├── Food.swift
 │   ├── Tag.swift
 │   ├── GroceryTrip.swift
+│   ├── PurchasedItem.swift
+│   ├── Meal.swift                    # Meal, MealItem, MealType
+│   ├── Profile.swift                 # Profile model (planned)
 │   ├── NutritionInfo.swift
 │   ├── NutritionSummary.swift
 │   ├── FoodCategory.swift
@@ -127,20 +139,30 @@ ProjectX/
 │   └── KeychainHelper.swift
 ├── Views/
 │   ├── Home/
+│   │   ├── HomeView.swift
 │   │   ├── TripDetailView.swift
 │   │   ├── ItemEditView.swift
 │   │   └── AddItemsSheet.swift
+│   ├── Meals/                        # New - Meal tracking
+│   │   ├── MealsView.swift
+│   │   └── MealDetailView.swift
 │   ├── Scan/
 │   │   ├── NutritionLabelScanView.swift
 │   │   ├── MultiPhotoPicker.swift
 │   │   └── FoodMatchingSheet.swift
 │   ├── FoodBank/
+│   │   ├── FoodBankView.swift
+│   │   └── FoodDetailView.swift
 │   ├── Analysis/
+│   │   └── AnalysisView.swift
 │   ├── Settings/
 │   │   ├── SettingsView.swift
-│   │   └── FamilyGuideView.swift
+│   │   ├── FamilyGuideView.swift
+│   │   └── ProfilesView.swift        # Planned - Profile management
 │   └── Components/
-│       └── VoiceInputButton.swift
+│       ├── VoiceInputButton.swift
+│       ├── SharedComponents.swift
+│       └── ProfileSwitcher.swift     # Planned - Quick profile switch
 ├── ProjectXApp.swift
 └── ContentView.swift
 ```
