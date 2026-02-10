@@ -245,7 +245,12 @@ struct QuickAddSheet: View {
                     loadFailedCount += 1
                     continue
                 }
-                let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
+                let receipt: ExtractedReceipt
+                if mode == .meal {
+                    receipt = try await service.extractMealItems(from: image, filterBabyFood: false)
+                } else {
+                    receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
+                }
                 mergedReceipt.items.append(contentsOf: receipt.items)
                 if mergedReceipt.storeName == nil { mergedReceipt.storeName = receipt.storeName }
                 if mergedReceipt.receiptDate == nil { mergedReceipt.receiptDate = receipt.receiptDate }
@@ -302,7 +307,8 @@ struct QuickAddSheet: View {
                 if mode == .food {
                     dispatchNutrition(try await service.extractNutritionLabel(fromPDF: pdfData))
                 } else {
-                    let receipt = try await service.extractReceipt(fromPDF: pdfData, filterBabyFood: settings.filterBabyFood)
+                    let filterBaby = mode == .meal ? false : settings.filterBabyFood
+                    let receipt = try await service.extractReceipt(fromPDF: pdfData, filterBabyFood: filterBaby)
                     await dispatchReceipt(receipt, service: service)
                 }
                 return
@@ -320,6 +326,9 @@ struct QuickAddSheet: View {
 
             if mode == .food {
                 dispatchNutrition(try await service.extractNutritionLabel(from: img))
+            } else if mode == .meal {
+                let receipt = try await service.extractMealItems(from: img, filterBabyFood: false)
+                await dispatchReceipt(receipt, service: service)
             } else {
                 let receipt = try await service.extractReceipt(from: img, filterBabyFood: settings.filterBabyFood)
                 await dispatchReceipt(receipt, service: service)

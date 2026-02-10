@@ -6,10 +6,12 @@ struct AddItemsSheet: View {
     @Query(sort: \Food.name) private var foods: [Food]
     let settings: AppSettings
     var quickAddMode: QuickAddMode = .trip
+    var startWithCamera: Bool = false
     let onItemsExtracted: ([ExtractedReceiptItem]) -> Void
 
     @State private var mode: InputMode = .options
     @State private var showCamera = false
+    @State private var didAutoLaunchCamera = false
     @State private var showPhotoPicker = false
     @State private var capturedImages: [UIImage] = []
     @State private var inputText = ""
@@ -59,6 +61,13 @@ struct AddItemsSheet: View {
                         }
                         .disabled(extractedItems.isEmpty)
                     }
+                }
+            }
+            .onAppear {
+                if startWithCamera && !didAutoLaunchCamera {
+                    didAutoLaunchCamera = true
+                    mode = .photos
+                    showCamera = true
                 }
             }
             .fullScreenCover(isPresented: $showCamera) {
@@ -231,7 +240,7 @@ struct AddItemsSheet: View {
             for image in capturedImages {
                 let receipt: ExtractedReceipt
                 if quickAddMode == .meal {
-                    receipt = try await service.extractMealItems(from: image, filterBabyFood: settings.filterBabyFood)
+                    receipt = try await service.extractMealItems(from: image, filterBabyFood: false)
                 } else {
                     receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
                 }

@@ -272,7 +272,16 @@ extension LLMTransport {
 
     func extractMealItems(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt {
         let response = try await sendVisionRequest(prompt: LLMPrompts.mealImagePrompt(filterBabyFood: filterBabyFood), image: image)
-        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
+        // LLMs may return a bare array of items instead of the expected dict wrapper.
+        // When that happens, ExtractedReceipt decoding succeeds but items are empty
+        // because the array elements don't have an "items" key.
+        // Try dict format first, fall back to bare array if items are empty or parsing fails.
+        if let receipt = try? LLMJSONParser.parse(response, as: ExtractedReceipt.self),
+           !receipt.items.isEmpty {
+            return receipt
+        }
+        let items = try LLMJSONParser.parse(response, as: [ExtractedReceiptItem].self)
+        return ExtractedReceipt(items: items)
     }
 
     func extractReceipt(from text: String, filterBabyFood: Bool) async throws -> ExtractedReceipt {
