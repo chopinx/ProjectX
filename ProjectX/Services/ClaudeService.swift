@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-final class ClaudeService: LLMService {
+final class ClaudeService: LLMTransport {
     private let apiKey: String
     private let model: ClaudeModel
     private let baseURL = "https://api.anthropic.com/v1/messages"
@@ -20,29 +20,10 @@ final class ClaudeService: LLMService {
         _ = try await sendRequest(body: body)
     }
 
-    func extractReceipt(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt {
-        let response = try await sendVisionRequest(prompt: LLMPrompts.receiptImagePrompt(filterBabyFood: filterBabyFood), image: image)
-        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
-    }
-
-    func extractReceipt(from text: String, filterBabyFood: Bool) async throws -> ExtractedReceipt {
-        let response = try await sendTextRequest(prompt: LLMPrompts.receiptTextPrompt(text, filterBabyFood: filterBabyFood))
-        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
-    }
-
+    // Claude supports native PDF via its document API
     func extractReceipt(fromPDF data: Data, filterBabyFood: Bool) async throws -> ExtractedReceipt {
         let response = try await sendPDFRequest(prompt: LLMPrompts.receiptImagePrompt(filterBabyFood: filterBabyFood), pdfData: data)
         return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
-    }
-
-    func extractNutritionLabel(from image: UIImage) async throws -> ExtractedNutrition {
-        let response = try await sendVisionRequest(prompt: LLMPrompts.nutritionLabelImagePrompt, image: image)
-        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
-    }
-
-    func extractNutritionLabel(from text: String) async throws -> ExtractedNutrition {
-        let response = try await sendTextRequest(prompt: LLMPrompts.nutritionLabelTextPrompt(text))
-        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
     }
 
     func extractNutritionLabel(fromPDF data: Data) async throws -> ExtractedNutrition {
@@ -50,44 +31,30 @@ final class ClaudeService: LLMService {
         return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
     }
 
-    func estimateNutrition(for foodName: String, category: String) async throws -> ExtractedNutrition {
-        let response = try await sendTextRequest(prompt: LLMPrompts.estimateNutritionPrompt(foodName: foodName, category: category))
-        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
-    }
+    // MARK: - LLMTransport
 
-    func fillEmptyNutrition(for foodName: String, category: String, tags: [String], existingNutrition: [String: Double]) async throws -> ExtractedNutrition {
-        let response = try await sendTextRequest(prompt: LLMPrompts.fillEmptyNutritionPrompt(foodName: foodName, category: category, tags: tags, existingNutrition: existingNutrition))
-        return try LLMJSONParser.parse(response, as: ExtractedNutrition.self)
-    }
-
-    func matchFood(itemName: String, existingFoods: [String]) async throws -> FoodMatch {
-        let response = try await sendTextRequest(prompt: LLMPrompts.matchFoodPrompt(itemName: itemName, existingFoods: existingFoods))
-        return try LLMJSONParser.parse(response, as: FoodMatch.self)
-    }
-
-    func suggestCategoryAndTags(for foodName: String, availableTags: [String]) async throws -> SuggestedFoodInfo {
-        let response = try await sendTextRequest(prompt: LLMPrompts.suggestCategoryAndTagsPrompt(foodName: foodName, availableTags: availableTags))
-        return try LLMJSONParser.parse(response, as: SuggestedFoodInfo.self)
-    }
-
-    func suggestNutritionTargets(for members: [FamilyMember]) async throws -> SuggestedNutritionTargets {
-        let response = try await sendTextRequest(prompt: LLMPrompts.suggestNutritionTargetsPrompt(members: members))
-        return try LLMJSONParser.parse(response, as: SuggestedNutritionTargets.self)
-    }
-
-    // MARK: - Private
-
-    private func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {
+    func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {
         let augmentedPrompt = await OCRService.augmentPrompt(prompt, withImage: image)
         let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
         return try await sendDocumentRequest(prompt: augmentedPrompt, base64: base64, mediaType: "image/jpeg")
     }
 
-    private func sendPDFRequest(prompt: String, pdfData: Data) async throws -> String {
+    func sendPDFRequest(prompt: String, pdfData: Data) async throws -> String {
         let augmentedPrompt = await OCRService.augmentPrompt(prompt, withPDF: pdfData)
         let base64 = pdfData.base64EncodedString()
         return try await sendDocumentRequest(prompt: augmentedPrompt, base64: base64, mediaType: "application/pdf")
     }
+
+    func sendTextRequest(prompt: String, maxTokens: Int = 1024) async throws -> String {
+        let body: [String: Any] = [
+            "model": model.rawValue,
+            "max_tokens": maxTokens,
+            "messages": [["role": "user", "content": prompt]]
+        ]
+        return try await sendRequest(body: body)
+    }
+
+    // MARK: - Private
 
     private func sendDocumentRequest(prompt: String, base64: String, mediaType: String) async throws -> String {
         let body: [String: Any] = [
@@ -100,15 +67,6 @@ final class ClaudeService: LLMService {
                     ["type": "text", "text": prompt]
                 ]
             ]]
-        ]
-        return try await sendRequest(body: body)
-    }
-
-    private func sendTextRequest(prompt: String) async throws -> String {
-        let body: [String: Any] = [
-            "model": model.rawValue,
-            "max_tokens": 1024,
-            "messages": [["role": "user", "content": prompt]]
         ]
         return try await sendRequest(body: body)
     }
@@ -135,7 +93,7 @@ final class ClaudeService: LLMService {
         guard let http = response as? HTTPURLResponse else { throw LLMError.invalidResponse }
         if http.statusCode == 401 { throw LLMError.invalidAPIKey }
         if http.statusCode == 429 { throw LLMError.rateLimited }
-        guard http.statusCode == 200 else { throw LLMError.invalidResponse }
+        guard http.statusCode == 200 else { throw LLMError.serverError(statusCode: http.statusCode) }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let content = json["content"] as? [[String: Any]],

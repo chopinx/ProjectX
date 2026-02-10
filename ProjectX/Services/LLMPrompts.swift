@@ -89,11 +89,11 @@ enum LLMPrompts {
         \(receiptJSON)
 
         Field rules:
-        - store_name: string or null if not visible
-        - receipt_date: YYYY-MM-DD format, or null
+        - store_name: string, or JSON null if not visible (not the string "null")
+        - receipt_date: YYYY-MM-DD format string, or JSON null
         \(receiptFieldRules)
         - category: one of \(categoryList)
-        - subcategory: from category's list:
+        - subcategory: from category's list, or null if unsure:
         \(categorySubcategoryMapping)
         \(strictOutputRules)
         """
@@ -112,11 +112,11 @@ enum LLMPrompts {
         \(receiptJSON)
 
         Field rules:
-        - store_name: string or null if not found
-        - receipt_date: YYYY-MM-DD format, or null
+        - store_name: string, or JSON null if not found (not the string "null")
+        - receipt_date: YYYY-MM-DD format string, or JSON null
         \(receiptFieldRules)
         - category: one of \(categoryList)
-        - subcategory: from category's list:
+        - subcategory: from category's list, or null if unsure:
         \(categorySubcategoryMapping)
         \(strictOutputRules)
         """
@@ -227,10 +227,6 @@ enum LLMPrompts {
         return """
         Suggest the best category, subcategory, and up to 3 most relevant tags for: "\(foodName)"
 
-        IMPORTANT:
-        1. Always provide BOTH category AND subcategory - the 2-level classification is required
-        2. Select up to 3 tags that best describe this food item
-
         Available categories and their subcategories (use rawValue format):
         \(categorySubcategoryMapping)
 
@@ -241,7 +237,7 @@ enum LLMPrompts {
 
         Field rules:
         - category: one of \(categoryList) (required)
-        - subcategory: MUST provide one from the category's subcategories list (required)
+        - subcategory: one from the category's subcategories list, or null if none apply
         - tags: up to 3 most relevant tags from the available list, empty array if none fit
         \(strictOutputRules)
         """
@@ -250,10 +246,17 @@ enum LLMPrompts {
     // MARK: - Nutrition Target Suggestion Prompt
 
     static func suggestNutritionTargetsPrompt(members: [FamilyMember]) -> String {
-        let membersJSON = members.map { member in
-            """
-            {"name":"\(member.name)","age":\(member.age),"weight":\(member.weight),"activityLevel":"\(member.activityLevel.rawValue)","dietType":"\(member.dietType.rawValue)"}
-            """
+        let membersJSON = members.compactMap { member -> String? in
+            let dict: [String: Any] = [
+                "name": member.name,
+                "age": member.age,
+                "weight": member.weight,
+                "activityLevel": member.activityLevel.rawValue,
+                "dietType": member.dietType.rawValue
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
+                  let str = String(data: data, encoding: .utf8) else { return nil }
+            return str
         }.joined(separator: ",")
 
         return """
@@ -293,14 +296,16 @@ enum LLMPrompts {
         return """
         Match "\(itemName)" to the most similar food from: \(foodList)
 
-        Required JSON structure:
-        {"foodName":"matched name or null","confidence":0.85,"isNewFood":false}
+        Required JSON structure (when match found):
+        {"foodName":"Exact Name From List","confidence":0.85,"isNewFood":false}
+
+        Required JSON structure (when NO match found):
+        {"foodName":null,"confidence":0,"isNewFood":true}
 
         Field rules:
-        - foodName: exact name from list, or null if no good match
-        - confidence: 0.0 to 1.0
+        - foodName: EXACT name from the list above, or JSON null if no good match. NEVER use the string "null" - use actual JSON null
+        - confidence: number from 0.0 to 1.0
         - isNewFood: true if confidence < 0.7 or no match, false otherwise
-        - If list is empty, return {"foodName":null,"confidence":0,"isNewFood":true}
         \(strictOutputRules)
         """
     }
