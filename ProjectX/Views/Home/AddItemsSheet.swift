@@ -239,7 +239,7 @@ struct AddItemsSheet: View {
             var allItems: [ExtractedReceiptItem] = []
             for image in capturedImages {
                 let receipt: ExtractedReceipt
-                if quickAddMode == .meal {
+                if quickAddMode == .meal || quickAddMode == .food {
                     receipt = try await service.extractMealItems(from: image, filterBabyFood: false)
                 } else {
                     receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)

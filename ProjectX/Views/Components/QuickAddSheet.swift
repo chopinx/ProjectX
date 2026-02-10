@@ -246,7 +246,7 @@ struct QuickAddSheet: View {
                     continue
                 }
                 let receipt: ExtractedReceipt
-                if mode == .meal {
+                if mode == .meal || mode == .food {
                     receipt = try await service.extractMealItems(from: image, filterBabyFood: false)
                 } else {
                     receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
@@ -324,9 +324,7 @@ struct QuickAddSheet: View {
                 return
             }
 
-            if mode == .food {
-                dispatchNutrition(try await service.extractNutritionLabel(from: img))
-            } else if mode == .meal {
+            if mode == .meal || mode == .food {
                 let receipt = try await service.extractMealItems(from: img, filterBabyFood: false)
                 await dispatchReceipt(receipt, service: service)
             } else {
