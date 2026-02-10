@@ -16,33 +16,46 @@ enum LLMProvider: String, CaseIterable, Identifiable {
 
     var defaultModel: LLMModel {
         switch self {
-        case .openai: return .openai(.gpt4o)
+        case .openai: return .openai(.gpt41)
         case .claude: return .claude(.sonnet4)
         }
     }
 }
 
 enum OpenAIModel: String, CaseIterable, Identifiable {
+    case gpt41 = "gpt-4.1"
+    case gpt41Mini = "gpt-4.1-mini"
+    case gpt41Nano = "gpt-4.1-nano"
     case gpt4o = "gpt-4o"
     case gpt4oMini = "gpt-4o-mini"
-    case gpt4Turbo = "gpt-4-turbo"
-    case gpt35Turbo = "gpt-3.5-turbo"
+    case o4Mini = "o4-mini"
+    case o3Mini = "o3-mini"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .gpt4o: return "GPT-4o (Recommended)"
+        case .gpt41: return "GPT-4.1"
+        case .gpt41Mini: return "GPT-4.1 Mini"
+        case .gpt41Nano: return "GPT-4.1 Nano"
+        case .gpt4o: return "GPT-4o"
         case .gpt4oMini: return "GPT-4o Mini"
-        case .gpt4Turbo: return "GPT-4 Turbo"
-        case .gpt35Turbo: return "GPT-3.5 Turbo"
+        case .o4Mini: return "o4 Mini (Reasoning)"
+        case .o3Mini: return "o3 Mini (Reasoning)"
         }
     }
 
     var supportsVision: Bool {
         switch self {
-        case .gpt4o, .gpt4oMini, .gpt4Turbo: return true
-        case .gpt35Turbo: return false
+        case .o3Mini: return false
+        default: return true
+        }
+    }
+
+    var isReasoningModel: Bool {
+        switch self {
+        case .o3Mini, .o4Mini: return true
+        default: return false
         }
     }
 }
@@ -243,8 +256,8 @@ final class AppSettings {
         self.openaiAPIKey = KeychainHelper.get(key: openaiKeyKey) ?? ""
         self.claudeAPIKey = KeychainHelper.get(key: claudeKeyKey) ?? ""
 
-        let openaiModelRaw = UserDefaults.standard.string(forKey: openaiModelKey) ?? OpenAIModel.gpt4o.rawValue
-        self.selectedOpenAIModel = OpenAIModel(rawValue: openaiModelRaw) ?? .gpt4o
+        let openaiModelRaw = UserDefaults.standard.string(forKey: openaiModelKey) ?? OpenAIModel.gpt41.rawValue
+        self.selectedOpenAIModel = OpenAIModel(rawValue: openaiModelRaw) ?? .gpt41
 
         let claudeModelRaw = UserDefaults.standard.string(forKey: claudeModelKey) ?? ClaudeModel.sonnet4.rawValue
         self.selectedClaudeModel = ClaudeModel(rawValue: claudeModelRaw) ?? .sonnet4

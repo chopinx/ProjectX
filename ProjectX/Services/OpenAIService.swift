@@ -6,17 +6,17 @@ final class OpenAIService: LLMTransport {
     private let model: OpenAIModel
     private let baseURL = "https://api.openai.com/v1/chat/completions"
 
-    init(apiKey: String, model: OpenAIModel = .gpt4o) {
+    init(apiKey: String, model: OpenAIModel = .gpt41) {
         self.apiKey = apiKey
         self.model = model
     }
 
     func validateAPIKey() async throws {
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model.rawValue,
-            "messages": [["role": "user", "content": "Hi"]],
-            "max_tokens": 1
+            "messages": [["role": "user", "content": "Hi"]]
         ]
+        applyTokenLimit(1, to: &body)
         _ = try await sendRequest(body: body)
     }
 
@@ -36,7 +36,7 @@ final class OpenAIService: LLMTransport {
     func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {
         let augmentedPrompt = await OCRService.augmentPrompt(prompt, withImage: image)
         let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model.rawValue,
             "messages": [[
                 "role": "user",
@@ -44,9 +44,9 @@ final class OpenAIService: LLMTransport {
                     ["type": "text", "text": augmentedPrompt],
                     ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(base64)"]]
                 ]
-            ]],
-            "max_tokens": 4096
+            ]]
         ]
+        applyTokenLimit(4096, to: &body)
         return try await sendRequest(body: body)
     }
 
@@ -57,15 +57,23 @@ final class OpenAIService: LLMTransport {
     }
 
     func sendTextRequest(prompt: String, maxTokens: Int = 1024) async throws -> String {
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model.rawValue,
-            "messages": [["role": "user", "content": prompt]],
-            "max_tokens": maxTokens
+            "messages": [["role": "user", "content": prompt]]
         ]
+        applyTokenLimit(maxTokens, to: &body)
         return try await sendRequest(body: body)
     }
 
     // MARK: - Private
+
+    private func applyTokenLimit(_ tokens: Int, to body: inout [String: Any]) {
+        if model.isReasoningModel {
+            body["max_completion_tokens"] = tokens
+        } else {
+            body["max_tokens"] = tokens
+        }
+    }
 
     private func sendRequest(body: [String: Any]) async throws -> String {
         guard let url = URL(string: baseURL) else { throw LLMError.invalidResponse }

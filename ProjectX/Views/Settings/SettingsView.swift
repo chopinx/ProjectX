@@ -121,14 +121,33 @@ struct SettingsView: View {
         switch settings.selectedProvider {
         case .openai:
             Picker("Model", selection: $settings.selectedOpenAIModel) {
-                ForEach(OpenAIModel.allCases) { model in
-                    Text(model.displayName).tag(model)
+                Section("GPT-4.1") {
+                    ForEach([OpenAIModel.gpt41, .gpt41Mini, .gpt41Nano], id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
+                }
+                Section("GPT-4o") {
+                    ForEach([OpenAIModel.gpt4o, .gpt4oMini], id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
+                }
+                Section("Reasoning") {
+                    ForEach([OpenAIModel.o4Mini, .o3Mini], id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
                 }
             }
         case .claude:
             Picker("Model", selection: $settings.selectedClaudeModel) {
-                ForEach(ClaudeModel.allCases) { model in
-                    Text(model.displayName).tag(model)
+                Section("Claude 4") {
+                    ForEach([ClaudeModel.sonnet4, .opus4], id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
+                }
+                Section("Claude 3.5") {
+                    ForEach([ClaudeModel.haiku35, .sonnet35], id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
                 }
             }
         }
