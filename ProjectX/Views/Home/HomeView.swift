@@ -87,7 +87,7 @@ private struct TripRow: View {
             HStack {
                 Text("\(trip.items.count) item\(trip.items.count == 1 ? "" : "s")")
                 Spacer()
-                Text(String(format: "%.2f", trip.totalSpent))
+                Text(trip.totalSpent, format: .currency(code: Locale.current.currency?.identifier ?? "USD"))
                     .fontWeight(.medium)
             }
             .font(.subheadline)

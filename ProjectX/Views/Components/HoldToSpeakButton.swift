@@ -1,6 +1,4 @@
 import SwiftUI
-import Speech
-import AVFoundation
 
 struct HoldToSpeakButton: View {
     let mode: QuickAddMode
@@ -12,21 +10,12 @@ struct HoldToSpeakButton: View {
     let onMealItems: ((_ items: [MealItem], _ date: Date?) -> Void)?
     let onFoodData: ((_ name: String, _ category: FoodCategory, _ nutrition: NutritionInfo?) -> Void)?
 
-    @State private var isRecording = false
-    @State private var permissionDenied = false
-    @State private var permissionChecked = false
-    @State private var transcribedText = ""
-    @GestureState private var isPressed = false
-
-    @State private var speechRecognizer: SFSpeechRecognizer?
-    @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    @State private var recognitionTask: SFSpeechRecognitionTask?
-    @State private var audioEngine: AVAudioEngine?
+    @State private var engine = SpeechRecognitionEngine()
 
     var body: some View {
         VStack(spacing: 8) {
-            if permissionDenied {
-                Button { openAppSettings() } label: {
+            if engine.permissionDenied {
+                Button { SpeechRecognitionEngine.openAppSettings() } label: {
                     Circle()
                         .fill(Color(.systemGray4))
                         .frame(width: 72, height: 72)
@@ -39,146 +28,60 @@ struct HoldToSpeakButton: View {
                 .buttonStyle(.plain)
             } else {
                 Circle()
-                    .fill(isRecording ? Color.red : Color.themePrimary)
+                    .fill(engine.isRecording ? Color.red : Color.themePrimary)
                     .frame(width: 72, height: 72)
                     .overlay {
-                        Image(systemName: isRecording ? "waveform" : "mic.fill")
+                        Image(systemName: engine.isRecording ? "waveform" : "mic.fill")
                             .font(.system(size: 28, weight: .semibold))
                             .foregroundStyle(.white)
-                            .symbolEffect(.variableColor.iterative, isActive: isRecording)
+                            .symbolEffect(.variableColor.iterative, isActive: engine.isRecording)
                     }
-                    .shadow(color: (isRecording ? Color.red : Color.themePrimary).opacity(0.4), radius: 8, y: 4)
-                    .scaleEffect(isPressed ? 1.1 : 1.0)
-                    .animation(.spring(response: 0.3), value: isPressed)
+                    .shadow(color: (engine.isRecording ? Color.red : Color.themePrimary).opacity(0.4), radius: 8, y: 4)
+                    .scaleEffect(engine.isRecording ? 1.1 : 1.0)
+                    .animation(.spring(response: 0.3), value: engine.isRecording)
                     .gesture(
-                        LongPressGesture(minimumDuration: 0.1)
-                            .updating($isPressed) { value, state, _ in
-                                state = value
-                            }
-                            .onChanged { _ in
-                                if !isRecording { startRecording() }
-                            }
-                            .onEnded { _ in
-                                stopRecordingAndProcess()
-                            }
-                    )
-                    .simultaneousGesture(
                         DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                if !engine.isRecording && !engine.permissionDenied {
+                                    engine.startRecording()
+                                }
+                            }
                             .onEnded { _ in
-                                if isRecording { stopRecordingAndProcess() }
+                                if engine.isRecording {
+                                    stopRecordingAndProcess()
+                                }
                             }
                     )
             }
 
-            if permissionDenied {
-                Button { openAppSettings() } label: {
+            if engine.permissionDenied {
+                Button { SpeechRecognitionEngine.openAppSettings() } label: {
                     Text("Mic access required")
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
                 .buttonStyle(.plain)
-            } else {
-                Text(isRecording ? "Release" : "Hold to speak")
+            } else if engine.isRecording && !engine.transcribedText.isEmpty {
+                Text(engine.transcribedText)
                     .font(.caption)
-                    .foregroundStyle(isRecording ? .red : .secondary)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .frame(maxWidth: 200)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text(engine.isRecording ? "Listening..." : "Hold to speak")
+                    .font(.caption)
+                    .foregroundStyle(engine.isRecording ? .red : .secondary)
             }
         }
-        .onAppear { checkPermissions() }
-        .onDisappear { stopRecording() }
-    }
-
-    private func openAppSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
-    }
-
-    private func checkPermissions() {
-        guard !permissionChecked else { return }
-
-        SFSpeechRecognizer.requestAuthorization { status in
-            Task { @MainActor in
-                if status != .authorized { permissionDenied = true }
-                permissionChecked = true
-            }
-        }
-
-        Task {
-            let granted = await AVAudioApplication.requestRecordPermission()
-            await MainActor.run {
-                if !granted { permissionDenied = true }
-            }
-        }
-    }
-
-    private func startRecording() {
-        transcribedText = ""
-
-        if speechRecognizer == nil {
-            speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        }
-        if audioEngine == nil {
-            audioEngine = AVAudioEngine()
-        }
-
-        guard let recognizer = speechRecognizer, recognizer.isAvailable,
-              let engine = audioEngine else { return }
-
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch { return }
-
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let request = recognitionRequest else { return }
-        request.shouldReportPartialResults = true
-
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else { return }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
-        }
-
-        engine.prepare()
-        do { try engine.start() } catch { return }
-        isRecording = true
-
-        recognitionTask = recognizer.recognitionTask(with: request) { result, error in
-            Task { @MainActor in
-                if let result = result {
-                    transcribedText = result.bestTranscription.formattedString
-                }
-                if error != nil || result?.isFinal == true {
-                    stopRecording()
-                }
-            }
-        }
-    }
-
-    private func stopRecording() {
-        guard isRecording else { return }
-
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-        isRecording = false
-
-        try? AVAudioSession.sharedInstance().setActive(false)
+        .onAppear { engine.checkPermissions() }
+        .onDisappear { engine.stopRecording() }
     }
 
     private func stopRecordingAndProcess() {
-        stopRecording()
-
-        let textToProcess = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !textToProcess.isEmpty else { return }
-
-        Task {
-            await processVoiceInput(textToProcess)
+        engine.stopRecordingWithMinimumDuration { text in
+            guard let text else { return }
+            Task { await processVoiceInput(text) }
         }
     }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NutritionLabelScanView: View {
     @Environment(\.dismiss) private var dismiss
+    let settings: AppSettings
     let onExtracted: (ExtractedNutrition) -> Void
 
     @State private var showCamera = false
@@ -10,7 +11,6 @@ struct NutritionLabelScanView: View {
     @State private var labelText = ""
     @State private var isExtracting = false
     @State private var errorMessage: String?
-    @State private var settings = AppSettings()
 
     var body: some View {
         VStack(spacing: 24) {

@@ -263,3 +263,82 @@ struct MacroStat: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+// MARK: - Nutrition Summary Card
+
+/// Shared summary card showing item count, macros, and unlinked warning.
+/// Used by both TripDetailView and MealDetailView.
+struct NutritionSummaryCard: View {
+    let activeItemCount: Int
+    let linkedCount: Int
+    let nutrition: (cal: Double, pro: Double, carb: Double, fat: Double, fiber: Double, sugar: Double)
+    var icon: String = "cart.fill"
+    var priceTotal: Double?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Items header (with optional price)
+            if let price = priceTotal {
+                HStack(spacing: 0) {
+                    itemCountView.frame(maxWidth: .infinity)
+                    Divider().frame(height: 36)
+                    HStack(spacing: 8) {
+                        Image(systemName: "dollarsign.circle.fill").foregroundStyle(.green)
+                        Text(String(format: "%.2f", price)).font(.title3).fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                itemCountView.frame(maxWidth: .infinity)
+            }
+
+            Divider()
+
+            // Main Macros Row
+            HStack(spacing: 0) {
+                MacroStat(value: Int(nutrition.cal), unit: "kcal", label: "Cal", color: .nutritionCalories)
+                MacroStat(value: Int(nutrition.pro), unit: "g", label: "Pro", color: .nutritionProtein)
+                MacroStat(value: Int(nutrition.carb), unit: "g", label: "Carb", color: .nutritionCarbs)
+                MacroStat(value: Int(nutrition.fat), unit: "g", label: "Fat", color: .nutritionFat)
+            }
+
+            // Fiber & Sugar Row
+            HStack(spacing: 0) {
+                HStack(spacing: 4) {
+                    Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.green)
+                    Text("\(Int(nutrition.fiber))g fiber").font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+                HStack(spacing: 4) {
+                    Image(systemName: "cube.fill").font(.caption).foregroundStyle(.pink)
+                    Text("\(Int(nutrition.sugar))g sugar").font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .foregroundStyle(.secondary)
+
+            // Warning for unlinked items
+            if linkedCount < activeItemCount {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text("\(activeItemCount - linkedCount) items not linked to food").font(.caption)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            }
+        }
+        .padding()
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var itemCountView: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(activeItemCount)").font(.title3).fontWeight(.semibold)
+                Text("\(linkedCount) linked").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+}

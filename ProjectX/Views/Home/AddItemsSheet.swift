@@ -5,6 +5,7 @@ struct AddItemsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Food.name) private var foods: [Food]
     let settings: AppSettings
+    var quickAddMode: QuickAddMode = .trip
     let onItemsExtracted: ([ExtractedReceiptItem]) -> Void
 
     @State private var mode: InputMode = .options
@@ -228,7 +229,12 @@ struct AddItemsSheet: View {
             guard let service = LLMServiceFactory.create(settings: settings) else { throw LLMError.invalidAPIKey }
             var allItems: [ExtractedReceiptItem] = []
             for image in capturedImages {
-                let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
+                let receipt: ExtractedReceipt
+                if quickAddMode == .meal {
+                    receipt = try await service.extractMealItems(from: image, filterBabyFood: settings.filterBabyFood)
+                } else {
+                    receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
+                }
                 allItems.append(contentsOf: receipt.items)
             }
             extractedItems = allItems

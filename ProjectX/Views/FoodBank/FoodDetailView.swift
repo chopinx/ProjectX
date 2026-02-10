@@ -108,7 +108,7 @@ struct FoodDetailView: View {
         }
         .sheet(isPresented: $showingScanLabel) {
             NavigationStack {
-                NutritionLabelScanView { extractedNutrition in
+                NutritionLabelScanView(settings: settings) { extractedNutrition in
                     // Fill empty fields only from scanned nutrition label
                     nutrition.populateEmptyOnly(from: extractedNutrition, source: .labelScan)
                     showingScanLabel = false

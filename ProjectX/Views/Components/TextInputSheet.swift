@@ -13,9 +13,13 @@ struct TextInputSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                Text(placeholder)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack {
+                    Text(placeholder)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    VoiceInputButton(text: $text)
+                }
 
                 TextEditor(text: $text)
                     .font(.body)

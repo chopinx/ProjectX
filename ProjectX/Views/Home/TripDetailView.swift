@@ -49,12 +49,15 @@ struct TripDetailView: View {
     @State private var showingAddItem = false
     @State private var showingAddItemsAI = false
     @State private var showingSaveError = false
+    @State private var showingDiscardAlert = false
     @State private var sortOption: ItemSortOption = .recent
     @State private var sortAscending = false
 
     private var existingTrip: GroceryTrip?
     private var profile: Profile?
     private var isNewTrip: Bool { existingTrip == nil }
+    private let originalItemCount: Int
+    private let originalStoreName: String
 
     private var sortedItems: [PurchasedItem] {
         let sorted: [PurchasedItem]
@@ -64,6 +67,10 @@ struct TripDetailView: View {
         default: sorted = items.sorted { sortOption.value(for: $0) < sortOption.value(for: $1) }
         }
         return sortAscending ? sorted : sorted.reversed()
+    }
+
+    private var hasChanges: Bool {
+        items.count != originalItemCount || storeName != originalStoreName || !deletedItems.isEmpty
     }
 
     private var activeItems: [PurchasedItem] { items.filter { !$0.isSkipped } }
@@ -80,6 +87,8 @@ struct TripDetailView: View {
         self.existingTrip = trip
         self.profile = profile
         self.settings = settings
+        self.originalItemCount = trip?.items.count ?? 0
+        self.originalStoreName = trip?.storeName ?? ""
         _date = State(initialValue: trip?.date ?? .now)
         _storeName = State(initialValue: trip?.storeName ?? "")
         _items = State(initialValue: trip?.items ?? [])
@@ -90,6 +99,8 @@ struct TripDetailView: View {
         self.existingTrip = nil
         self.profile = profile
         self.settings = settings
+        self.originalItemCount = items.count
+        self.originalStoreName = storeName ?? ""
         _date = State(initialValue: date ?? .now)
         _storeName = State(initialValue: storeName ?? "")
         _items = State(initialValue: items)
@@ -152,7 +163,15 @@ struct TripDetailView: View {
         .navigationTitle(isNewTrip ? "New Trip" : "Edit Trip")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {
+                    if hasChanges {
+                        showingDiscardAlert = true
+                    } else {
+                        dismiss()
+                    }
+                }
+            }
             ToolbarItem(placement: .confirmationAction) { Button("Save", action: save) }
         }
         .sheet(item: $editingItem) { item in
@@ -180,70 +199,24 @@ struct TripDetailView: View {
         .alert("Save Error", isPresented: $showingSaveError) { Button("OK") {} } message: {
             Text("Failed to save changes. Please try again.")
         }
+        .alert("Discard Changes?", isPresented: $showingDiscardAlert) {
+            Button("Discard", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("You have unsaved changes that will be lost.")
+        }
     }
 
     // MARK: - Summary Card
 
     private var summaryCard: some View {
-        VStack(spacing: 12) {
-            // Items & Price Row
-            HStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "cart.fill").foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(activeItems.count)").font(.title3).fontWeight(.semibold)
-                        Text("\(linkedCount) linked").font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-
-                Divider().frame(height: 36)
-
-                HStack(spacing: 8) {
-                    Image(systemName: "dollarsign.circle.fill").foregroundStyle(.green)
-                    Text(String(format: "%.2f", totalPrice)).font(.title3).fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-            }
-
-            Divider()
-
-            // Main Macros Row
-            HStack(spacing: 0) {
-                MacroStat(value: Int(totalNutrition.cal), unit: "kcal", label: "Cal", color: .nutritionCalories)
-                MacroStat(value: Int(totalNutrition.pro), unit: "g", label: "Pro", color: .nutritionProtein)
-                MacroStat(value: Int(totalNutrition.carb), unit: "g", label: "Carb", color: .nutritionCarbs)
-                MacroStat(value: Int(totalNutrition.fat), unit: "g", label: "Fat", color: .nutritionFat)
-            }
-
-            // Fiber & Sugar Row
-            HStack(spacing: 0) {
-                HStack(spacing: 4) {
-                    Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.green)
-                    Text("\(Int(totalNutrition.fiber))g fiber").font(.caption)
-                }
-                .frame(maxWidth: .infinity)
-                HStack(spacing: 4) {
-                    Image(systemName: "cube.fill").font(.caption).foregroundStyle(.pink)
-                    Text("\(Int(totalNutrition.sugar))g sugar").font(.caption)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .foregroundStyle(.secondary)
-
-            // Warning for unlinked items
-            if linkedCount < activeItems.count {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text("\(activeItems.count - linkedCount) items not linked to food").font(.caption)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-            }
-        }
-        .padding()
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        NutritionSummaryCard(
+            activeItemCount: activeItems.count,
+            linkedCount: linkedCount,
+            nutrition: totalNutrition,
+            icon: "cart.fill",
+            priceTotal: totalPrice
+        )
     }
 
     private var sortMenu: some View {

@@ -64,7 +64,7 @@ struct ContentView: View {
             case .addItems:
                 if let mode = directCameraMode {
                     NavigationStack {
-                        AddItemsSheet(settings: settings) { extracted in
+                        AddItemsSheet(settings: settings, quickAddMode: mode) { extracted in
                             handleExtractedItems(extracted, mode: mode)
                         }
                     }

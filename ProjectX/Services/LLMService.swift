@@ -211,6 +211,9 @@ protocol LLMService {
     /// Extract items and store name from a receipt image
     func extractReceipt(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt
 
+    /// Extract food items from a meal photo (real food, nutrition label, receipt, or food name)
+    func extractMealItems(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt
+
     /// Extract items and store name from receipt text (copy-pasted or typed)
     func extractReceipt(from text: String, filterBabyFood: Bool) async throws -> ExtractedReceipt
 
@@ -264,6 +267,11 @@ extension LLMTransport {
 
     func extractReceipt(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt {
         let response = try await sendVisionRequest(prompt: LLMPrompts.receiptImagePrompt(filterBabyFood: filterBabyFood), image: image)
+        return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
+    }
+
+    func extractMealItems(from image: UIImage, filterBabyFood: Bool) async throws -> ExtractedReceipt {
+        let response = try await sendVisionRequest(prompt: LLMPrompts.mealImagePrompt(filterBabyFood: filterBabyFood), image: image)
         return try LLMJSONParser.parse(response, as: ExtractedReceipt.self)
     }
 

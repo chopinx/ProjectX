@@ -122,6 +122,43 @@ enum LLMPrompts {
         """
     }
 
+    // MARK: - Meal Image Prompt
+
+    static func mealImagePrompt(filterBabyFood: Bool) -> String {
+        """
+        Identify food items from this image. The image could be:
+        1. A photo of real food (a dish, a plate, ingredients) — identify each food item and estimate weight
+        2. Multiple food items or a food spread — identify each item separately
+        3. A nutrition label or food packaging — extract the food name and estimate weight from serving info
+        4. A grocery receipt — extract food items as you would from a receipt
+        5. Text with food names — extract the food names
+
+        \(buildFoodOnlyRule(filterBabyFood: filterBabyFood))
+
+        Required JSON structure:
+        \(receiptJSON)
+
+        Field rules:
+        - store_name: JSON null (not applicable for meal photos)
+        - receipt_date: JSON null (not applicable for meal photos)
+        - name: the food item name in English (translate if needed). For real food photos, be specific (e.g., "Grilled chicken breast" not just "Chicken")
+        - quantity_grams: ESTIMATED weight in grams. For photos of real food, estimate portion size:
+          * Small portion of meat/fish: 100-150g, medium: 200g, large: 300g+
+          * Cup of rice/pasta (cooked): 150-200g
+          * Salad bowl: 150-250g
+          * Slice of bread: 30-40g
+          * Glass of milk/juice: 250ml ≈ 250g
+          * Whole fruit: apple 180g, banana 120g, orange 200g
+          * Bowl of soup: 300-400g
+          If from a nutrition label, use the serving size if visible
+        - price: 0 (not applicable for meals)
+        - category: one of \(categoryList)
+        - subcategory: from category's list, or null if unsure:
+        \(categorySubcategoryMapping)
+        \(strictOutputRules)
+        """
+    }
+
     // MARK: - Nutrition Prompts
 
     private static let nutritionJSON = """

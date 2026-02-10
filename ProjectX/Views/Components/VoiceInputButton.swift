@@ -1,131 +1,45 @@
 import SwiftUI
-import Speech
-import AVFoundation
 
 struct VoiceInputButton: View {
     @Binding var text: String
-    @State private var isRecording = false
-    @State private var permissionDenied = false
-    @State private var permissionChecked = false
-
-    // Use lazy initialization to avoid crashes
-    @State private var speechRecognizer: SFSpeechRecognizer?
-    @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    @State private var recognitionTask: SFSpeechRecognitionTask?
-    @State private var audioEngine: AVAudioEngine?
+    @State private var engine = SpeechRecognitionEngine()
+    @State private var errorMessage: String?
 
     var body: some View {
         Button {
-            if permissionDenied {
-                openAppSettings()
+            if engine.permissionDenied {
+                SpeechRecognitionEngine.openAppSettings()
             } else {
-                isRecording ? stopRecording() : startRecording()
+                engine.isRecording ? engine.stopRecording() : startRecording()
             }
         } label: {
-            Image(systemName: permissionDenied ? "mic.slash.circle.fill" : (isRecording ? "stop.circle.fill" : "mic.circle.fill"))
+            Image(systemName: engine.permissionDenied ? "mic.slash.circle.fill" : (engine.isRecording ? "stop.circle.fill" : "mic.circle.fill"))
                 .font(.title)
-                .foregroundStyle(permissionDenied ? .secondary : (isRecording ? .red : Color.themePrimary))
-                .symbolEffect(.pulse, isActive: isRecording)
+                .foregroundStyle(engine.permissionDenied ? .secondary : (engine.isRecording ? .red : Color.themePrimary))
+                .symbolEffect(.pulse, isActive: engine.isRecording)
         }
-        .disabled(!permissionChecked && !permissionDenied)
-        .onAppear { checkPermissions() }
-        .onDisappear { stopRecording() }
-        .help(permissionDenied ? "Microphone access required. Tap to open Settings." : "")
-    }
-
-    private func openAppSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
-    }
-
-    private func checkPermissions() {
-        guard !permissionChecked else { return }
-
-        SFSpeechRecognizer.requestAuthorization { status in
-            Task { @MainActor in
-                if status != .authorized {
-                    permissionDenied = true
-                }
-                permissionChecked = true
-            }
+        .disabled(!engine.permissionChecked && !engine.permissionDenied)
+        .onAppear { engine.checkPermissions() }
+        .onDisappear { engine.stopRecording() }
+        .help(engine.permissionDenied ? "Microphone access required. Tap to open Settings." : "")
+        .onChange(of: engine.transcribedText) { _, newValue in
+            text = newValue
         }
-
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            Task { @MainActor in
-                if !granted {
-                    permissionDenied = true
-                }
-            }
+        .alert("Voice Input Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
     private func startRecording() {
-        // Initialize lazily
-        if speechRecognizer == nil {
-            speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        errorMessage = nil
+        engine.startRecording()
+        if !engine.isRecording {
+            errorMessage = "Speech recognition is not available"
         }
-        if audioEngine == nil {
-            audioEngine = AVAudioEngine()
-        }
-
-        guard let recognizer = speechRecognizer, recognizer.isAvailable,
-              let engine = audioEngine else { return }
-
-        // Configure audio session
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            return
-        }
-
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let request = recognitionRequest else { return }
-        request.shouldReportPartialResults = true
-
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-
-        // Check format is valid
-        guard format.sampleRate > 0 else { return }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
-        }
-
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            return
-        }
-        isRecording = true
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [self] result, error in
-            Task { @MainActor in
-                if let result = result {
-                    text = result.bestTranscription.formattedString
-                }
-                if error != nil || result?.isFinal == true {
-                    stopRecording()
-                }
-            }
-        }
-    }
-
-    private func stopRecording() {
-        guard isRecording else { return }
-
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-        isRecording = false
-
-        // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false)
     }
 }

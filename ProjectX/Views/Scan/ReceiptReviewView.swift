@@ -125,6 +125,15 @@ struct ReceiptReviewView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { ReceiptDraft.clear(); onDismiss?(); dismiss() } }
             ToolbarItem(placement: .confirmationAction) { Button("Save Trip", action: save).disabled(vm.isLoading || vm.extractedItems.isEmpty) }
+            if restored && !vm.isLoading {
+                ToolbarItem(placement: .secondaryAction) {
+                    Button("Re-extract") {
+                        ReceiptDraft.clear()
+                        restored = false
+                        Task { await vm.retry(); await vm.autoMatch(foods) }
+                    }
+                }
+            }
         }
         .task {
             if !restored, let d = ReceiptDraft.load(), !d.items.isEmpty { vm.restore(d, foods); restored = true }

@@ -84,20 +84,7 @@ struct QuickAddSheet: View {
         .onChange(of: selectedPhotos) { _, newItems in
             Task { await processSelectedPhotos(newItems) }
         }
-        .overlay {
-            if isProcessing {
-                ZStack {
-                    Color.black.opacity(0.4).ignoresSafeArea()
-                    VStack(spacing: 12) {
-                        ProgressView().tint(.white)
-                        Text(processingMessage).font(.subheadline).foregroundStyle(.white)
-                    }
-                    .padding(24)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-            }
-        }
+        .overlay { if isProcessing { AIProcessingOverlay(message: processingMessage) } }
     }
 
     // MARK: - Header
@@ -155,15 +142,15 @@ struct QuickAddSheet: View {
                 },
                 onTripItems: { items, storeName, date in
                     onTripItems?(items, storeName, date)
-                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
                 },
                 onMealItems: { items, date in
                     onMealItems?(items, date)
-                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
                 },
                 onFoodData: { name, category, nutrition in
                     onFoodData?(name, category, nutrition)
-                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
                 }
             )
 
