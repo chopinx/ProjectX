@@ -121,6 +121,11 @@ struct SettingsView: View {
         switch settings.selectedProvider {
         case .openai:
             Picker("Model", selection: $settings.selectedOpenAIModel) {
+                Section("GPT-5") {
+                    ForEach([OpenAIModel.gpt5, .gpt5Nano], id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
+                }
                 Section("GPT-4.1") {
                     ForEach([OpenAIModel.gpt41, .gpt41Mini, .gpt41Nano], id: \.self) { model in
                         Text(model.displayName).tag(model)
@@ -132,7 +137,7 @@ struct SettingsView: View {
                     }
                 }
                 Section("Reasoning") {
-                    ForEach([OpenAIModel.o4Mini, .o3Mini], id: \.self) { model in
+                    ForEach([OpenAIModel.o3, .o4Mini, .o3Mini], id: \.self) { model in
                         Text(model.displayName).tag(model)
                     }
                 }

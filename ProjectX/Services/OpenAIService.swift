@@ -6,7 +6,7 @@ final class OpenAIService: LLMTransport {
     private let model: OpenAIModel
     private let baseURL = "https://api.openai.com/v1/chat/completions"
 
-    init(apiKey: String, model: OpenAIModel = .gpt41) {
+    init(apiKey: String, model: OpenAIModel = .gpt5) {
         self.apiKey = apiKey
         self.model = model
     }
