@@ -283,7 +283,7 @@ struct NutritionSummaryCard: View {
                     itemCountView.frame(maxWidth: .infinity)
                     Divider().frame(height: 36)
                     HStack(spacing: 8) {
-                        Image(systemName: "dollarsign.circle.fill").foregroundStyle(.green)
+                        Image(systemName: "dollarsign.circle.fill").foregroundStyle(Color.themeSuccess)
                         Text(String(format: "%.2f", price)).font(.title3).fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity)
@@ -305,12 +305,12 @@ struct NutritionSummaryCard: View {
             // Fiber & Sugar Row
             HStack(spacing: 0) {
                 HStack(spacing: 4) {
-                    Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.green)
+                    Image(systemName: "leaf.fill").font(.caption).foregroundStyle(Color.nutritionFiber)
                     Text("\(Int(nutrition.fiber))g fiber").font(.caption)
                 }
                 .frame(maxWidth: .infinity)
                 HStack(spacing: 4) {
-                    Image(systemName: "cube.fill").font(.caption).foregroundStyle(.pink)
+                    Image(systemName: "cube.fill").font(.caption).foregroundStyle(Color.nutritionSugar)
                     Text("\(Int(nutrition.sugar))g sugar").font(.caption)
                 }
                 .frame(maxWidth: .infinity)
@@ -320,7 +320,7 @@ struct NutritionSummaryCard: View {
             // Warning for unlinked items
             if linkedCount < activeItemCount {
                 HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.themeWarning)
                     Text("\(activeItemCount - linkedCount) items not linked to food").font(.caption)
                 }
                 .foregroundStyle(.secondary)
@@ -334,7 +334,7 @@ struct NutritionSummaryCard: View {
 
     private var itemCountView: some View {
         HStack(spacing: 8) {
-            Image(systemName: icon).foregroundStyle(.blue)
+            Image(systemName: icon).foregroundStyle(Color.themeInfo)
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(activeItemCount)").font(.title3).fontWeight(.semibold)
                 Text("\(linkedCount) linked").font(.caption2).foregroundStyle(.secondary)

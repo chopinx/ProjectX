@@ -116,10 +116,10 @@ private struct MealRow: View {
 
     private var mealTypeColor: Color {
         switch meal.mealType {
-        case .breakfast: .orange
-        case .lunch: .yellow
-        case .dinner: .indigo
-        case .snack: .green
+        case .breakfast: .themeSecondary
+        case .lunch: .themeWarning
+        case .dinner: .themePrimaryDark
+        case .snack: .themeSuccess
         }
     }
 }

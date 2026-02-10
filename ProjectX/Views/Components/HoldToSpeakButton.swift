@@ -58,7 +58,7 @@ struct HoldToSpeakButton: View {
                 Button { SpeechRecognitionEngine.openAppSettings() } label: {
                     Text("Mic access required")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.themeError)
                 }
                 .buttonStyle(.plain)
             } else if engine.isRecording && !engine.transcribedText.isEmpty {

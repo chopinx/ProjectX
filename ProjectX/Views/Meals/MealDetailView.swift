@@ -296,7 +296,7 @@ struct MealItemRow: View {
                             .foregroundStyle(item.isSkipped ? .secondary : .primary)
                             .strikethrough(item.isSkipped)
                         if item.food == nil && !item.isSkipped {
-                            Image(systemName: "link.badge.plus").font(.caption).foregroundStyle(.orange)
+                            Image(systemName: "link.badge.plus").font(.caption).foregroundStyle(Color.themeWarning)
                         }
                     }
                     if let food = item.food {

@@ -118,6 +118,11 @@ struct AnalysisView: View {
                 .padding()
             }
             .navigationTitle("Analysis")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ProfileToolbarButton(settings: settings)
+                }
+            }
             .sheet(isPresented: $showingDatePicker) { customDatePickerSheet }
         }
     }
@@ -155,20 +160,13 @@ struct AnalysisView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(TimePeriod.allCases) { period in
-                        Button {
+                        FilterChip(period.rawValue, isSelected: selectedPeriod == period) {
                             if period == .custom {
                                 previousPeriodRaw = selectedPeriodRaw
                                 showingDatePicker = true
                             }
                             selectedPeriodRaw = period.rawValue
-                        } label: {
-                            Text(period.rawValue).font(.subheadline)
-                                .padding(.horizontal, 14).padding(.vertical, 10)
-                                .background(selectedPeriod == period ? Color.themePrimary : Color(.tertiarySystemBackground))
-                                .foregroundStyle(selectedPeriod == period ? .white : .primary)
-                                .clipShape(Capsule())
                         }
-                        .buttonStyle(.pressFeedback)
                     }
                 }
             }

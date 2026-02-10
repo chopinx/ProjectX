@@ -310,7 +310,7 @@ private struct ExtractedItemRow: View {
                 HStack(spacing: 6) {
                     Text(item.name).font(.headline)
                     if item.linkedFoodId != nil {
-                        Image(systemName: "link").font(.caption).foregroundStyle(.green)
+                        Image(systemName: "link").font(.caption).foregroundStyle(Color.themeSuccess)
                     }
                 }
                 HStack(spacing: 8) {
@@ -319,7 +319,7 @@ private struct ExtractedItemRow: View {
                 }
                 .font(.caption).foregroundStyle(.secondary)
                 if let linkedName = linkedFoodName {
-                    Text("→ \(linkedName)").font(.caption2).foregroundStyle(.green)
+                    Text("→ \(linkedName)").font(.caption2).foregroundStyle(Color.themeSuccess)
                 } else {
                     Text(item.subcategory ?? item.category)
                         .font(.caption2).foregroundStyle(.tertiary)

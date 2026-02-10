@@ -142,13 +142,7 @@ struct ScanView: View {
     }
 
     private var processingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
-            VStack(spacing: 16) {
-                ProgressView().scaleEffect(1.5).tint(.white)
-                Text("Processing...").font(.headline).foregroundStyle(.white)
-            }.padding(32).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 16))
-        }
+        AIProcessingOverlay(message: "Processing...")
     }
 
     private func handleImageCaptured(_ image: UIImage) {

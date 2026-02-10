@@ -28,7 +28,7 @@ struct ProfilesView: View {
                     }
                     Button { editingProfile = profile } label: {
                         Label("Edit", systemImage: "pencil")
-                    }.tint(.orange)
+                    }.tint(Color.themeSecondary)
                 }
             }
         }
@@ -99,7 +99,7 @@ private struct ProfileRow: View {
 
             if isActive {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.themeSuccess)
             }
         }
         .padding(.vertical, 4)
