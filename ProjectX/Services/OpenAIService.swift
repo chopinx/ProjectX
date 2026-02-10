@@ -78,13 +78,14 @@ final class OpenAIService: LLMService {
     // MARK: - Private
 
     private func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {
+        let augmentedPrompt = await OCRService.augmentPrompt(prompt, withImage: image)
         let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
         let body: [String: Any] = [
             "model": model.rawValue,
             "messages": [[
                 "role": "user",
                 "content": [
-                    ["type": "text", "text": prompt],
+                    ["type": "text", "text": augmentedPrompt],
                     ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(base64)"]]
                 ]
             ]],

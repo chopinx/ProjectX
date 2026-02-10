@@ -245,19 +245,19 @@ struct ContentView: View {
                         return
                     }
                     if mode == .trip {
-                        pendingTripItems = mapToTripItems(receipt.items, foods: foods)
+                        pendingTripItems = ItemMapper.mapToTripItems(receipt.items, foods: foods)
                         pendingTripStoreName = receipt.storeName
                         pendingTripDate = receipt.parsedDate
                         showingTripEdit = true
                     } else {
-                        pendingMealItems = mapToMealItems(receipt.items, foods: foods)
+                        pendingMealItems = ItemMapper.mapToMealItems(receipt.items, foods: foods)
                         pendingMealDate = receipt.parsedDate
                         showingMealEdit = true
                     }
 
                 case .food:
                     let nutrition = try await service.extractNutritionLabel(from: image)
-                    pendingFoodData = (extractedFoodName(from: nutrition), .other, NutritionInfo(from: nutrition, source: .labelScan))
+                    pendingFoodData = (ItemMapper.extractedFoodName(from: nutrition), .other, NutritionInfo(from: nutrition, source: .labelScan))
                     showingFoodEdit = true
                 }
             } catch {

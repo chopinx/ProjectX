@@ -303,23 +303,6 @@ struct MealDetailView: View {
     }
 }
 
-// MARK: - Supporting Views
-
-private struct MacroStat: View {
-    let value: Int, unit: String, label: String, color: Color
-
-    var body: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 2) {
-                Text("\(value)").font(.subheadline).fontWeight(.semibold)
-                Text(unit).font(.caption2).foregroundStyle(.secondary)
-            }
-            Text(label).font(.caption2).foregroundStyle(color)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
 // MARK: - Meal Item Row
 
 struct MealItemRow: View {

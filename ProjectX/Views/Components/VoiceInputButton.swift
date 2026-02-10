@@ -16,16 +16,26 @@ struct VoiceInputButton: View {
 
     var body: some View {
         Button {
-            isRecording ? stopRecording() : startRecording()
+            if permissionDenied {
+                openAppSettings()
+            } else {
+                isRecording ? stopRecording() : startRecording()
+            }
         } label: {
-            Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
+            Image(systemName: permissionDenied ? "mic.slash.circle.fill" : (isRecording ? "stop.circle.fill" : "mic.circle.fill"))
                 .font(.title)
-                .foregroundStyle(isRecording ? .red : Color.themePrimary)
+                .foregroundStyle(permissionDenied ? .secondary : (isRecording ? .red : Color.themePrimary))
                 .symbolEffect(.pulse, isActive: isRecording)
         }
-        .disabled(permissionDenied || !permissionChecked)
+        .disabled(!permissionChecked && !permissionDenied)
         .onAppear { checkPermissions() }
         .onDisappear { stopRecording() }
+        .help(permissionDenied ? "Microphone access required. Tap to open Settings." : "")
+    }
+
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func checkPermissions() {

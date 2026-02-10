@@ -5,6 +5,7 @@ struct MealsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Meal.date, order: .reverse) private var allMeals: [Meal]
     @Bindable var settings: AppSettings
+    @State private var mealToDelete: Meal?
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -38,12 +39,9 @@ struct MealsView: View {
                         } label: {
                             MealRow(meal: meal)
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                withAnimation {
-                                    context.delete(meal)
-                                    try? context.save()
-                                }
+                                DispatchQueue.main.async { mealToDelete = meal }
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -51,12 +49,19 @@ struct MealsView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 80) }
             .navigationTitle("Meals")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     ProfileToolbarButton(settings: settings)
                 }
             }
+        }
+        .deleteConfirmation("Delete Meal?", item: $mealToDelete, message: { meal in
+            "Delete \(meal.mealType.rawValue) with \(meal.items.count) item\(meal.items.count == 1 ? "" : "s")? This cannot be undone."
+        }) { meal in
+            context.delete(meal)
+            try? context.save()
         }
     }
 }

@@ -79,10 +79,33 @@ Flexible tagging system for food labeling with custom colors.
 
 ### OCR Processing
 
-- Uses Vision framework for on-device text extraction
+- Uses Apple Vision framework (`VNRecognizeTextRequest`) for on-device text extraction
 - All images and PDFs go through OCR before LLM processing
-- Supports both searchable and image-based PDFs
 - Text extraction happens locally (no API calls needed)
+- Supports both searchable and image-based PDFs (PDF rendered to image via `PDFHelper`)
+
+### OCR+Image Dual-Input for LLM
+
+Every image-based or PDF-based LLM call uses a dual-input approach: OCR-extracted text is appended to the prompt alongside the original image/document sent to the LLM.
+
+**Rationale:** LLM vision capabilities can miss or misread text in images, especially on receipts with small print, unusual fonts, or low contrast. Running on-device OCR first and including the extracted text gives the LLM two complementary signals, improving accuracy for item names, prices, and nutrition values.
+
+**How it works:**
+1. Before each vision API call, `OCRService.extractText()` runs on the image
+2. If OCR succeeds, the extracted text is appended to the prompt (e.g., `\n\nOCR extracted text from image:\n{text}`)
+3. The image is still sent as before -- the LLM receives both image and OCR text
+4. If OCR fails or returns empty, the original prompt is used unchanged (graceful fallback)
+
+**Long-image segmentation:**
+- Tall images (aspect ratio > 3.0, height > 4000px) are segmented into overlapping sections
+- Each segment is OCR'd separately, then results are merged with boundary deduplication
+- This handles long grocery receipts that exceed Vision framework limits
+
+**Coverage:** All image/PDF LLM paths are covered via the service layer:
+- `OpenAIService.sendVisionRequest` -- augments prompt with OCR before API call
+- `ClaudeService.sendVisionRequest` -- same pattern for image requests
+- `ClaudeService.sendPDFRequest` -- OCR on PDF-rendered image before native PDF API call
+- OpenAI PDF path converts to image via `PDFHelper`, then goes through `sendVisionRequest`
 
 ### Import Options
 
@@ -238,18 +261,24 @@ Custom SwiftUI Layout for tag chips.
 
 ### LLM Operations
 
-| Operation | Input | Output |
-|-----------|-------|--------|
-| Extract Receipt | Image/Text | [ExtractedReceiptItem] |
-| Extract Nutrition Label | Image/Text | ExtractedNutrition |
-| Estimate Nutrition | Food name, category | ExtractedNutrition |
-| Match Food | Item name, foods list | Food suggestion |
+| Operation | Input | Output | OCR Pre-processing |
+|-----------|-------|--------|--------------------|
+| Extract Receipt | Image/Text/PDF | [ExtractedReceiptItem] | Yes (image/PDF) |
+| Extract Nutrition Label | Image/Text/PDF | ExtractedNutrition | Yes (image/PDF) |
+| Estimate Nutrition | Food name, category | ExtractedNutrition | No (text-only) |
+| Fill Empty Nutrition | Food name, existing values | ExtractedNutrition | No (text-only) |
+| Match Food | Item name, foods list | Food suggestion | No (text-only) |
+| Suggest Category/Tags | Food name, available tags | SuggestedFoodInfo | No (text-only) |
+| Suggest Nutrition Targets | Family member profiles | SuggestedNutritionTargets | No (text-only) |
+
+Image and PDF operations automatically run on-device OCR via `OCRService` and append the extracted text to the LLM prompt alongside the image. See [OCR+Image Dual-Input](#ocr--import-features) for details.
 
 ### Files
 
 - `ProjectX/Services/LLMService.swift` - Protocol and types
-- `ProjectX/Services/OpenAIService.swift` - OpenAI implementation
-- `ProjectX/Services/ClaudeService.swift` - Claude implementation
+- `ProjectX/Services/OpenAIService.swift` - OpenAI implementation (with OCR augmentation)
+- `ProjectX/Services/ClaudeService.swift` - Claude implementation (with OCR augmentation)
+- `ProjectX/Services/OCRService.swift` - Vision framework OCR with long-image segmentation
 
 ---
 

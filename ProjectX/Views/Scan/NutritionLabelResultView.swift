@@ -39,7 +39,7 @@ struct NutritionLabelResultView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView().scaleEffect(1.5)
+                LoadingStateView(message: "Extracting nutrition info...")
             } else if let error = errorMessage {
                 errorView(error)
             } else if let nutrition = extractedNutrition {

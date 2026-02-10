@@ -24,7 +24,7 @@
 
 - **Grams only:** All quantities stored in grams. LLM converts all units (kg, L, pcs) to grams.
 - **Nutrition per 100g:** All nutrition values are per 100g, scaled by `quantity / 100`.
-- **LLM Integration:** Receipt scanning, nutrition estimation, food matching.
+- **LLM Integration:** Receipt scanning, nutrition estimation, food matching. Image/PDF inputs are pre-processed with on-device OCR (Vision framework) and the extracted text is sent alongside the image for improved accuracy.
 - **Secure API Keys:** Stored in iOS Keychain.
 - **Simplified Analysis:** MVP shows all-time and last-7-days summaries (charts deferred).
 
@@ -57,6 +57,7 @@
 23. LLM weight estimation based on typical package sizes when weight not on receipt
 24. Meal tracking mode (breakfast/lunch/dinner/snack) - alternative consumption input (see [Features](features.md#meal-tracking-mode))
 25. Multi-profile support - isolated consumption data, shared Food Bank (see [Features](features.md#multi-profile-support))
+26. OCR+Image dual-input for LLM calls - on-device OCR text appended to prompts alongside images for better accuracy (see [Features](features.md#ocr--import-features))
 
 ---
 
@@ -108,6 +109,7 @@
 | Switch between profiles | Yes |
 | Isolated consumption data per profile | Yes |
 | Shared Food Bank across profiles | Yes |
+| OCR pre-processing for image/PDF LLM calls | Yes |
 
 ---
 

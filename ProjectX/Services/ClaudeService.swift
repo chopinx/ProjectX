@@ -78,13 +78,15 @@ final class ClaudeService: LLMService {
     // MARK: - Private
 
     private func sendVisionRequest(prompt: String, image: UIImage) async throws -> String {
+        let augmentedPrompt = await OCRService.augmentPrompt(prompt, withImage: image)
         let base64 = image.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
-        return try await sendDocumentRequest(prompt: prompt, base64: base64, mediaType: "image/jpeg")
+        return try await sendDocumentRequest(prompt: augmentedPrompt, base64: base64, mediaType: "image/jpeg")
     }
 
     private func sendPDFRequest(prompt: String, pdfData: Data) async throws -> String {
+        let augmentedPrompt = await OCRService.augmentPrompt(prompt, withPDF: pdfData)
         let base64 = pdfData.base64EncodedString()
-        return try await sendDocumentRequest(prompt: prompt, base64: base64, mediaType: "application/pdf")
+        return try await sendDocumentRequest(prompt: augmentedPrompt, base64: base64, mediaType: "application/pdf")
     }
 
     private func sendDocumentRequest(prompt: String, base64: String, mediaType: String) async throws -> String {

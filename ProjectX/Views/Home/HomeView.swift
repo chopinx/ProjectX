@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \GroceryTrip.date, order: .reverse) private var allTrips: [GroceryTrip]
     @Bindable var settings: AppSettings
+    @State private var tripToDelete: GroceryTrip?
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -37,12 +38,9 @@ struct HomeView: View {
                         } label: {
                             TripRow(trip: trip, title: tripTitle(for: trip))
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                withAnimation {
-                                    context.delete(trip)
-                                    try? context.save()
-                                }
+                                DispatchQueue.main.async { tripToDelete = trip }
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -50,12 +48,19 @@ struct HomeView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 80) }
             .navigationTitle("Trips")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     ProfileToolbarButton(settings: settings)
                 }
             }
+        }
+        .deleteConfirmation("Delete Trip?", item: $tripToDelete, message: { trip in
+            "Delete trip with \(trip.items.count) item\(trip.items.count == 1 ? "" : "s")? This cannot be undone."
+        }) { trip in
+            context.delete(trip)
+            try? context.save()
         }
     }
 

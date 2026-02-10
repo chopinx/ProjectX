@@ -1,7 +1,5 @@
 import SwiftUI
 import SwiftData
-import Speech
-import AVFoundation
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -208,15 +206,15 @@ struct QuickAddSheet: View {
         }
         switch mode {
         case .trip:
-            onTripItems?(mapToTripItems(receipt.items, foods: foods), receipt.storeName, receipt.parsedDate)
+            onTripItems?(ItemMapper.mapToTripItems(receipt.items, foods: foods), receipt.storeName, receipt.parsedDate)
             dismiss()
         case .meal:
-            onMealItems?(mapToMealItems(receipt.items, foods: foods), receipt.parsedDate)
+            onMealItems?(ItemMapper.mapToMealItems(receipt.items, foods: foods), receipt.parsedDate)
             dismiss()
         case .food:
             if let first = receipt.items.first {
                 do {
-                    let (name, category, nutrition) = try await prepareFoodData(from: first.name, service: service)
+                    let (name, category, nutrition) = try await ItemMapper.prepareFoodData(from: first.name, service: service)
                     onFoodData?(name, category, nutrition)
                     dismiss()
                 } catch {
@@ -228,7 +226,7 @@ struct QuickAddSheet: View {
 
     private func dispatchNutrition(_ nutrition: ExtractedNutrition) {
         let nutritionInfo = NutritionInfo(from: nutrition, source: .labelScan)
-        onFoodData?(extractedFoodName(from: nutrition), .other, nutritionInfo)
+        onFoodData?(ItemMapper.extractedFoodName(from: nutrition), .other, nutritionInfo)
         dismiss()
     }
 
@@ -374,262 +372,3 @@ private struct ActionCircleButton: View {
     }
 }
 
-// MARK: - Hold to Speak Button
-
-private struct HoldToSpeakButton: View {
-    let mode: QuickAddMode
-    let settings: AppSettings
-    let foods: [Food]
-    let onProcessing: (String) -> Void
-    let onComplete: (String?) -> Void
-    let onTripItems: ((_ items: [PurchasedItem], _ storeName: String?, _ date: Date?) -> Void)?
-    let onMealItems: ((_ items: [MealItem], _ date: Date?) -> Void)?
-    let onFoodData: ((_ name: String, _ category: FoodCategory, _ nutrition: NutritionInfo?) -> Void)?
-
-    @State private var isRecording = false
-    @State private var permissionDenied = false
-    @State private var permissionChecked = false
-    @State private var transcribedText = ""
-    @GestureState private var isPressed = false
-
-    @State private var speechRecognizer: SFSpeechRecognizer?
-    @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    @State private var recognitionTask: SFSpeechRecognitionTask?
-    @State private var audioEngine: AVAudioEngine?
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Circle()
-                .fill(isRecording ? Color.red : Color.themePrimary)
-                .frame(width: 72, height: 72)
-                .overlay {
-                    Image(systemName: isRecording ? "waveform" : "mic.fill")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .symbolEffect(.variableColor.iterative, isActive: isRecording)
-                }
-                .shadow(color: (isRecording ? Color.red : Color.themePrimary).opacity(0.4), radius: 8, y: 4)
-                .scaleEffect(isPressed ? 1.1 : 1.0)
-                .animation(.spring(response: 0.3), value: isPressed)
-                .gesture(
-                    LongPressGesture(minimumDuration: 0.1)
-                        .updating($isPressed) { value, state, _ in
-                            state = value
-                        }
-                        .onChanged { _ in
-                            if !isRecording { startRecording() }
-                        }
-                        .onEnded { _ in
-                            stopRecordingAndProcess()
-                        }
-                )
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 0)
-                        .onEnded { _ in
-                            if isRecording { stopRecordingAndProcess() }
-                        }
-                )
-                .disabled(permissionDenied)
-                .onAppear { checkPermissions() }
-                .onDisappear { stopRecording() }
-
-            Text(isRecording ? "Release" : "Hold to speak")
-                .font(.caption)
-                .foregroundStyle(isRecording ? .red : .secondary)
-        }
-    }
-
-    private func checkPermissions() {
-        guard !permissionChecked else { return }
-
-        SFSpeechRecognizer.requestAuthorization { status in
-            Task { @MainActor in
-                if status != .authorized { permissionDenied = true }
-                permissionChecked = true
-            }
-        }
-
-        Task {
-            let granted = await AVAudioApplication.requestRecordPermission()
-            await MainActor.run {
-                if !granted { permissionDenied = true }
-            }
-        }
-    }
-
-    private func startRecording() {
-        transcribedText = ""
-
-        if speechRecognizer == nil {
-            speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        }
-        if audioEngine == nil {
-            audioEngine = AVAudioEngine()
-        }
-
-        guard let recognizer = speechRecognizer, recognizer.isAvailable,
-              let engine = audioEngine else { return }
-
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch { return }
-
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let request = recognitionRequest else { return }
-        request.shouldReportPartialResults = true
-
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else { return }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
-        }
-
-        engine.prepare()
-        do { try engine.start() } catch { return }
-        isRecording = true
-
-        recognitionTask = recognizer.recognitionTask(with: request) { result, error in
-            Task { @MainActor in
-                if let result = result {
-                    transcribedText = result.bestTranscription.formattedString
-                }
-                if error != nil || result?.isFinal == true {
-                    stopRecording()
-                }
-            }
-        }
-    }
-
-    private func stopRecording() {
-        guard isRecording else { return }
-
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-        isRecording = false
-
-        try? AVAudioSession.sharedInstance().setActive(false)
-    }
-
-    private func stopRecordingAndProcess() {
-        stopRecording()
-
-        let textToProcess = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !textToProcess.isEmpty else { return }
-
-        Task {
-            await processVoiceInput(textToProcess)
-        }
-    }
-
-    private func processVoiceInput(_ text: String) async {
-        guard settings.isConfigured else {
-            onComplete("Please configure your API key in Settings first")
-            return
-        }
-
-        onProcessing("Processing...")
-
-        guard let service = LLMServiceFactory.create(settings: settings) else {
-            onComplete("Failed to create AI service")
-            return
-        }
-
-        do {
-            switch mode {
-            case .trip, .meal:
-                let receipt = try await service.extractReceipt(from: text, filterBabyFood: settings.filterBabyFood)
-                guard !receipt.items.isEmpty else {
-                    onComplete("Couldn't identify any items")
-                    return
-                }
-                onComplete(nil)
-                if mode == .trip {
-                    onTripItems?(mapToTripItems(receipt.items, foods: foods), receipt.storeName, receipt.parsedDate)
-                } else {
-                    onMealItems?(mapToMealItems(receipt.items, foods: foods), receipt.parsedDate)
-                }
-
-            case .food:
-                let (foodName, category, nutrition) = try await prepareFoodData(from: text, service: service)
-                onComplete(nil)
-                onFoodData?(foodName, category, nutrition)
-            }
-        } catch {
-            onComplete("Failed to process: \(error.localizedDescription)")
-        }
-    }
-}
-
-// MARK: - Shared Helpers
-
-/// Extract the food name from an ExtractedNutrition, falling back to "Scanned Food"
-func extractedFoodName(from nutrition: ExtractedNutrition) -> String {
-    if let name = nutrition.foodName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-        return name
-    }
-    return "Scanned Food"
-}
-
-/// Find the best matching food for an item name using local string matching
-func findMatchingFood(for itemName: String, in foods: [Food]) -> Food? {
-    let nameLower = itemName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !nameLower.isEmpty else { return nil }
-
-    // Exact match
-    if let food = foods.first(where: { $0.name.lowercased() == nameLower }) {
-        return food
-    }
-
-    // Best substring match with length-ratio threshold
-    var bestMatch: (food: Food, score: Double)?
-    for food in foods {
-        let foodLower = food.name.lowercased()
-        if nameLower.contains(foodLower) || foodLower.contains(nameLower) {
-            let shorter = Double(min(nameLower.count, foodLower.count))
-            let longer = Double(max(nameLower.count, foodLower.count))
-            let score = shorter / longer
-            if score > (bestMatch?.score ?? 0) {
-                bestMatch = (food, score)
-            }
-        }
-    }
-
-    return bestMatch?.score ?? 0 >= 0.6 ? bestMatch?.food : nil
-}
-
-func mapToTripItems(_ extracted: [ExtractedReceiptItem], foods: [Food]) -> [PurchasedItem] {
-    extracted.map { item in
-        let linkedFood = findMatchingFood(for: item.name, in: foods)
-        return PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: linkedFood)
-    }
-}
-
-func mapToMealItems(_ extracted: [ExtractedReceiptItem], foods: [Food]) -> [MealItem] {
-    extracted.map { item in
-        let linkedFood = findMatchingFood(for: item.name, in: foods)
-        return MealItem(name: item.name, quantity: item.quantityGrams, food: linkedFood)
-    }
-}
-
-private func prepareFoodData(from text: String, service: LLMService) async throws -> (String, FoodCategory, NutritionInfo?) {
-    let foodName = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    let suggestion = try await service.suggestCategoryAndTags(for: foodName, availableTags: [])
-    let nutrition = try await service.estimateNutrition(for: foodName, category: suggestion.category)
-
-    var category = FoodCategory.other
-    if let main = FoodMainCategory(rawValue: suggestion.category) {
-        let sub = suggestion.subcategory.flatMap { s in main.subcategories.first { $0.rawValue == s } }
-        category = FoodCategory(main: main, sub: sub)
-    }
-
-    let nutritionInfo = NutritionInfo(from: nutrition, source: .aiEstimate)
-    return (foodName, category, nutritionInfo)
-}
