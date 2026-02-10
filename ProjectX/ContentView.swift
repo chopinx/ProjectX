@@ -2,20 +2,22 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    enum ActiveFullScreenCover: Identifiable {
+        case scan, addItems, reviewImport, nutritionImport, tripEdit, mealEdit, foodEdit
+        var id: Self { self }
+    }
+
     @Bindable var settings: AppSettings
     @Environment(\.importManager) private var importManager
     @Environment(\.scanFlowManager) private var scanFlowManager
     @Environment(\.modelContext) private var context
     @AppStorage("selectedTab") private var selectedTab = 0
-    @State private var showingScan = false
-    @State private var showingNutritionScan = false
+    @State private var activeFullScreenCover: ActiveFullScreenCover?
+    @State private var lastFullScreenCover: ActiveFullScreenCover?
     @State private var showingAddOptions = false
-    @State private var showingDirectCamera = false
     @State private var directCameraMode: QuickAddMode?
     @State private var pendingImportImage: UIImage?
     @State private var pendingImportPDF: Data?
-    @State private var showReviewFromImport = false
-    @State private var showNutritionFromImport = false
     @State private var isProcessingImport = false
     @State private var importError: String?
 
@@ -26,9 +28,7 @@ struct ContentView: View {
     @State private var pendingMealItems: [MealItem] = []
     @State private var pendingMealDate: Date?
     @State private var pendingFoodData: (name: String, category: FoodCategory, nutrition: NutritionInfo?)?
-    @State private var showingTripEdit = false
-    @State private var showingMealEdit = false
-    @State private var showingFoodEdit = false
+    @State private var pendingFoodPreparation: String?
 
     @Query(sort: \Profile.createdAt) private var profiles: [Profile]
 
@@ -57,15 +57,48 @@ struct ContentView: View {
                 floatingAddButton
             }
         }
-        .fullScreenCover(isPresented: $showingScan) {
-            ScanView(settings: settings, onDismiss: { showingScan = false })
-        }
-        .fullScreenCover(isPresented: $showingNutritionScan) {
-            ScanView(settings: settings, initialMode: .nutritionLabel, onDismiss: { showingNutritionScan = false })
-        }
-        .fullScreenCover(isPresented: $showingDirectCamera) {
-            CameraView(sourceType: .camera, onImageCaptured: handleDirectCameraCapture, onCancel: { showingDirectCamera = false })
-                .ignoresSafeArea()
+        .fullScreenCover(item: $activeFullScreenCover, onDismiss: handleFullScreenCoverDismiss) { cover in
+            switch cover {
+            case .scan:
+                ScanView(settings: settings, onDismiss: { activeFullScreenCover = nil })
+            case .addItems:
+                if let mode = directCameraMode {
+                    NavigationStack {
+                        AddItemsSheet(settings: settings) { extracted in
+                            handleExtractedItems(extracted, mode: mode)
+                        }
+                    }
+                } else {
+                    // directCameraMode should always be set before presenting .addItems
+                    Color.clear.onAppear { activeFullScreenCover = nil }
+                }
+            case .reviewImport:
+                if let pdf = pendingImportPDF {
+                    NavigationStack { ReceiptReviewView(pdfData: pdf, settings: settings) }
+                } else if let image = pendingImportImage {
+                    NavigationStack { ReceiptReviewView(image: image, settings: settings) }
+                }
+            case .nutritionImport:
+                if let pdf = pendingImportPDF {
+                    NavigationStack { NutritionLabelResultView(pdfData: pdf, settings: settings) }
+                } else if let image = pendingImportImage {
+                    NavigationStack { NutritionLabelResultView(image: image, settings: settings) }
+                }
+            case .tripEdit:
+                NavigationStack {
+                    TripDetailView(items: pendingTripItems, storeName: pendingTripStoreName, date: pendingTripDate, profile: activeProfile, settings: settings)
+                }
+            case .mealEdit:
+                NavigationStack {
+                    MealDetailView(items: pendingMealItems, date: pendingMealDate, profile: activeProfile, settings: settings)
+                }
+            case .foodEdit:
+                if let data = pendingFoodData {
+                    NavigationStack {
+                        FoodDetailView(name: data.name, category: data.category, nutrition: data.nutrition, settings: settings)
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showingAddOptions, onDismiss: presentPendingEditView) {
             if let mode = quickAddMode {
@@ -75,7 +108,9 @@ struct ContentView: View {
                     onScanPhoto: {
                         showingAddOptions = false
                         directCameraMode = mode
-                        showingDirectCamera = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            activeFullScreenCover = .addItems
+                        }
                     },
                     onTripItems: { items, storeName, date in
                         pendingTripItems = items
@@ -96,43 +131,15 @@ struct ContentView: View {
         .sheet(isPresented: .init(get: { importManager.showingImportTypeSelection }, set: { importManager.showingImportTypeSelection = $0 })) {
             importTypeSheet
         }
-        .fullScreenCover(isPresented: $showReviewFromImport) {
-            if let pdf = pendingImportPDF {
-                NavigationStack { ReceiptReviewView(pdfData: pdf, settings: settings) }
-            } else if let image = pendingImportImage {
-                NavigationStack { ReceiptReviewView(image: image, settings: settings) }
-            }
-        }
-        .fullScreenCover(isPresented: $showNutritionFromImport) {
-            if let pdf = pendingImportPDF {
-                NavigationStack { NutritionLabelResultView(pdfData: pdf, settings: settings) }
-            } else if let image = pendingImportImage {
-                NavigationStack { NutritionLabelResultView(image: image, settings: settings) }
-            }
-        }
-        .fullScreenCover(isPresented: $showingTripEdit, onDismiss: clearPendingTripData) {
-            NavigationStack {
-                TripDetailView(items: pendingTripItems, storeName: pendingTripStoreName, date: pendingTripDate, profile: activeProfile, settings: settings)
-            }
-        }
-        .fullScreenCover(isPresented: $showingMealEdit, onDismiss: clearPendingMealData) {
-            NavigationStack {
-                MealDetailView(items: pendingMealItems, date: pendingMealDate, profile: activeProfile, settings: settings)
-            }
-        }
-        .fullScreenCover(isPresented: $showingFoodEdit, onDismiss: { pendingFoodData = nil }) {
-            if let data = pendingFoodData {
-                NavigationStack {
-                    FoodDetailView(name: data.name, category: data.category, nutrition: data.nutrition, settings: settings)
-                }
-            }
-        }
         .overlay { if isProcessingImport { processingOverlay } }
         .alert("Error", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) { Button("OK") { importError = nil } } message: { Text(importError ?? "") }
         .onChange(of: scanFlowManager.requestScanTab) { _, request in
-            if request { showingScan = true; scanFlowManager.requestScanTab = false }
+            if request { activeFullScreenCover = .scan; scanFlowManager.requestScanTab = false }
         }
         .onAppear { ensureProfileAndMigrateData() }
+        .onChange(of: activeFullScreenCover) { _, newValue in
+            if let newValue { lastFullScreenCover = newValue }
+        }
     }
 
     private func ensureProfileAndMigrateData() {
@@ -172,13 +179,44 @@ struct ContentView: View {
         try? context.save()
     }
 
+    private func handleFullScreenCoverDismiss() {
+        switch lastFullScreenCover {
+        case .addItems:
+            if let foodName = pendingFoodPreparation {
+                // Food mode needs async AI processing before presenting edit view
+                pendingFoodPreparation = nil
+                Task {
+                    isProcessingImport = true
+                    defer { isProcessingImport = false }
+                    guard let service = LLMServiceFactory.create(settings: settings) else {
+                        importError = "Please configure your API key in Settings"
+                        return
+                    }
+                    do {
+                        let (name, category, nutrition) = try await ItemMapper.prepareFoodData(from: foodName, service: service)
+                        pendingFoodData = (name, category, nutrition)
+                        activeFullScreenCover = .foodEdit
+                    } catch {
+                        importError = "Failed to process food: \(error.localizedDescription)"
+                    }
+                }
+            } else {
+                presentPendingEditView()
+            }
+        case .tripEdit: clearPendingTripData()
+        case .mealEdit: clearPendingMealData()
+        case .foodEdit: pendingFoodData = nil
+        default: break
+        }
+    }
+
     private func presentPendingEditView() {
         if !pendingTripItems.isEmpty {
-            showingTripEdit = true
+            activeFullScreenCover = .tripEdit
         } else if !pendingMealItems.isEmpty {
-            showingMealEdit = true
+            activeFullScreenCover = .mealEdit
         } else if pendingFoodData != nil {
-            showingFoodEdit = true
+            activeFullScreenCover = .foodEdit
         }
     }
 
@@ -220,50 +258,33 @@ struct ContentView: View {
         }
     }
 
-    private func handleDirectCameraCapture(_ image: UIImage) {
-        showingDirectCamera = false
-        guard let mode = directCameraMode else { return }
+    /// Maps extracted items to model objects, resolving AI-assigned `linkedFoodId` to Food objects.
+    /// Unlike `ItemMapper` (which does local string matching), this preserves the AI-based linking
+    /// already performed by `AddItemsSheet.autoLinkFoods`.
+    private func handleExtractedItems(_ extracted: [ExtractedReceiptItem], mode: QuickAddMode) {
+        let foodDescriptor = FetchDescriptor<Food>(sortBy: [SortDescriptor(\.name)])
+        let foods = (try? context.fetch(foodDescriptor)) ?? []
 
-        Task {
-            isProcessingImport = true
-            defer { isProcessingImport = false }
-
-            guard let service = LLMServiceFactory.create(settings: settings) else {
-                importError = "Please configure your API key in Settings"
-                return
+        switch mode {
+        case .trip:
+            pendingTripItems = extracted.map { item in
+                let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
+                return PurchasedItem(name: item.name, quantity: item.quantityGrams, price: item.price, food: linkedFood)
             }
 
-            let foodDescriptor = FetchDescriptor<Food>(sortBy: [SortDescriptor(\.name)])
-            let foods = (try? context.fetch(foodDescriptor)) ?? []
+        case .meal:
+            pendingMealItems = extracted.map { item in
+                let linkedFood = item.linkedFoodId.flatMap { id in foods.first { $0.id == id } }
+                return MealItem(name: item.name, quantity: item.quantityGrams, food: linkedFood)
+            }
 
-            do {
-                switch mode {
-                case .trip, .meal:
-                    let receipt = try await service.extractReceipt(from: image, filterBabyFood: settings.filterBabyFood)
-                    guard !receipt.items.isEmpty else {
-                        importError = "Couldn't identify any items"
-                        return
-                    }
-                    if mode == .trip {
-                        pendingTripItems = ItemMapper.mapToTripItems(receipt.items, foods: foods)
-                        pendingTripStoreName = receipt.storeName
-                        pendingTripDate = receipt.parsedDate
-                        showingTripEdit = true
-                    } else {
-                        pendingMealItems = ItemMapper.mapToMealItems(receipt.items, foods: foods)
-                        pendingMealDate = receipt.parsedDate
-                        showingMealEdit = true
-                    }
-
-                case .food:
-                    let nutrition = try await service.extractNutritionLabel(from: image)
-                    pendingFoodData = (ItemMapper.extractedFoodName(from: nutrition), .other, NutritionInfo(from: nutrition, source: .labelScan))
-                    showingFoodEdit = true
-                }
-            } catch {
-                importError = "Failed to process: \(error.localizedDescription)"
+        case .food:
+            if let first = extracted.first {
+                pendingFoodPreparation = first.name
             }
         }
+        // The AddItemsSheet will dismiss (setting activeFullScreenCover = nil),
+        // then handleFullScreenCoverDismiss presents the appropriate edit view.
     }
 
     private func processImportedContent(type: ScanView.ScanType) async {
@@ -286,6 +307,6 @@ struct ContentView: View {
         }
 
         selectedTab = 2  // Navigate to Foods tab
-        if type == .receipt { showReviewFromImport = true } else { showNutritionFromImport = true }
+        activeFullScreenCover = type == .receipt ? .reviewImport : .nutritionImport
     }
 }

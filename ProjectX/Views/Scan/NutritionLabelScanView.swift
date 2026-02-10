@@ -5,7 +5,6 @@ struct NutritionLabelScanView: View {
     let onExtracted: (ExtractedNutrition) -> Void
 
     @State private var showCamera = false
-    @State private var showPhotoPicker = false
     @State private var showTextInput = false
     @State private var capturedImages: [UIImage] = []
     @State private var labelText = ""
@@ -35,9 +34,6 @@ struct NutritionLabelScanView: View {
             CameraView(sourceType: .camera, onImageCaptured: { capturedImages.append($0); showCamera = false }, onCancel: { showCamera = false })
                 .ignoresSafeArea()
         }
-        .sheet(isPresented: $showPhotoPicker) {
-            MultiPhotoPicker(maxSelection: 5, onImagesPicked: { capturedImages.append(contentsOf: $0); showPhotoPicker = false }, onCancel: { showPhotoPicker = false })
-        }
         .sheet(isPresented: $showTextInput) {
             TextInputSheet(text: $labelText, title: "Enter Nutrition",
                           placeholder: "Paste or type nutrition label text below",
@@ -59,16 +55,13 @@ struct NutritionLabelScanView: View {
             Image(systemName: "text.viewfinder").font(.system(size: 80)).foregroundStyle(Color.themePrimary)
             VStack(spacing: 8) {
                 Text("Scan Nutrition Label").font(.title2).fontWeight(.semibold)
-                Text("Take photos, choose from library, or enter text")
+                Text("Take photos or enter text")
                     .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             VStack(spacing: 12) {
                 Button { showCamera = true } label: {
                     Label("Take Photo", systemImage: "camera.fill").frame(maxWidth: .infinity)
                 }.buttonStyle(.borderedProminent).tint(Color.themePrimary)
-                Button { showPhotoPicker = true } label: {
-                    Label("Choose Photos", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity)
-                }.buttonStyle(.bordered).tint(Color.themePrimary)
                 Button { labelText = ""; showTextInput = true } label: {
                     Label("Enter Text", systemImage: "text.alignleft").frame(maxWidth: .infinity)
                 }.buttonStyle(.bordered).tint(Color.themePrimary)
@@ -111,15 +104,6 @@ struct NutritionLabelScanView: View {
                     Button { showCamera = true } label: {
                         VStack {
                             Image(systemName: "camera.fill").font(.title2)
-                            Text("Add").font(.caption)
-                        }
-                        .frame(width: 80, height: 160)
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }.buttonStyle(.plain)
-                    Button { showPhotoPicker = true } label: {
-                        VStack {
-                            Image(systemName: "photo.badge.plus").font(.title2)
                             Text("Add").font(.caption)
                         }
                         .frame(width: 80, height: 160)
